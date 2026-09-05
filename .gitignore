@@ -4,7 +4,9 @@ dist/
 .pytest_cache/
 __pycache__/
 *.pyc
-data/*.db
 test_tmp*/
-data/imports/
 .env
+.env.local
+.venv/
+data/
+pytest-cache-files-*/

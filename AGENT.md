@@ -3,9 +3,18 @@
 
 ## 技术栈
 
+- 后端：Python、FastAPI、LangChain 单 Agent、SQLite。
+- 音乐分析：Essentia；音频/文本跨模态检索：CLAP。只保留音乐 RAG。
+- Agent 工具仅有 `search_library`、`find_similar_tracks`、`generate_dj_set`。
+- 前端：React + Vite；当前工作区仍是旧原型，尚未适配新后端。
+- 架构与开发说明见 [docs](docs/README.md)；界面设计参考 [DESIGN.md](DESIGN.md)。
 
 ## 常用命令
 
+- 离线测试：`python -m pytest backend/tests -q`
+- 完整音频依赖：`python -m pip install -r requirements-audio.txt`
+- 下载模型：`python -m backend.music.download_models`
+- 启动后端：`python -m uvicorn backend.main:app --host 127.0.0.1 --port 8765`
 
 ## 代码规范
 - 改动前先阅读相关模块与现有模式。

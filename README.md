@@ -1,54 +1,30 @@
-# DropIt DJ Set Copilot
+# DropIt DJ Agent
 
-DropIt 是一个 React + FastAPI 的 DJ Set 生成助手网页原型。浏览器负责曲库上传、Brief 与审核界面，FastAPI 负责音频索引、规划、规则审核和导出。
+DropIt 的后端以 LangChain Agent 为对话入口，使用 Essentia 分析音乐属性，CLAP 检索本地歌曲。
+Agent 只调用三个工具：`search_library`、`find_similar_tracks`、`generate_dj_set`。
 
-## 已实现的 MVP 闭环
+音乐 RAG 仅保存歌曲的音频向量；查询文本通过同一个 CLAP 模型临时编码。曲目信息、音频向量、
+会话、后台任务和 Set 均保存在 SQLite，不需要普通文本向量库、Chroma 或外部音乐 API。
 
-- 从浏览器选择音频文件夹，支持 MP3、WAV、FLAC、AIFF、M4A
-- 使用 Mutagen 读取可用标签与时长
-- 将曲库保存到本地 SQLite，并生成可检索的 BPM、Key、Energy、Mood、Set Role
-- 根据时长、BPM、能量曲线、风格和补充说明生成 Set
-- 显示 Curator、Planner、Critic 的可追踪协作记录，固定展示一次 Critic 修订闭环
-- 支持人工上移、下移曲目并确认 Set
-- 导出 M3U、JSON、CSV
+文档入口：[docs](docs/README.md)。
 
-当前 BPM、Key、Energy 是可重复的轻量原型特征，用于 10-30 首歌曲的作品集演示。后续可在 `backend/services.py` 中替换为 librosa、Essentia 或外部分析服务，不影响前端和数据契约。
-
-## 本地运行
-
-要求 Node.js 20+ 与 Python 3.11+。
+- [运行与验证](docs/tutorial-run-and-observe.md)：安装、模型下载、导入、对话和故障排查。
+- [架构与边界](docs/explanation-agent-architecture.md)：模块职责、音乐 RAG、数据范围和取舍。
+- [接口与配置](docs/reference-api-tools-and-data.md)：三个 Tool、HTTP/SSE、数据与环境变量。
+- [项目讲解](docs/howto-ai-application-interview.md)：演示顺序、设计理由和测试边界。
 
 ```bash
-npm install
+docker compose -f compose.backend.yaml build
+docker compose -f compose.backend.yaml run --rm api python -m backend.music.download_models
+docker compose -f compose.backend.yaml up
+```
+
+启动后访问 `http://127.0.0.1:8765/api/docs`。配置服务器的 `DEEPSEEK_API_KEY` 后可使用 Agent 对话；
+缺少聊天密钥不影响曲库管理和本地音乐分析。
+
+本次重构范围是后端 API、Agent、检索、任务和模型编码接口；前端没有随本次后端分层一起重构。
+
+```bash
 python -m pip install -r requirements.txt
-npm run dev
-```
-
-打开 `http://127.0.0.1:5173`，然后选择一个本地音频文件夹。开发模式会并行启动 Vite 和 FastAPI。
-
-## 生产运行
-
-React 构建产物由 FastAPI 直接托管，只需要启动一个服务：
-
-```bash
-npm run build
-npm start
-```
-
-打开 `http://127.0.0.1:8765`。
-
-## 验证
-
-```bash
-npm run build
-npm test
-```
-
-FastAPI 文档位于 `http://127.0.0.1:8765/docs`，前端开发地址为 `http://127.0.0.1:5173`。
-
-## 工程结构
-
-```text
-backend/       FastAPI、SQLite、模型与 Set 生成服务
-src/           React 界面与本地 API 客户端
+python -m pytest backend/tests -q
 ```

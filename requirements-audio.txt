@@ -1,0 +1,6 @@
+-r requirements.txt
+# Essentia publishes Linux wheels; use the Python 3.11 Docker runtime on Windows.
+essentia==2.1b6.dev1389
+torch>=2.6,<3
+transformers>=4.46,<5
+huggingface-hub>=0.26,<1

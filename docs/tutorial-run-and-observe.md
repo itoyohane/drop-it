@@ -1,0 +1,123 @@
+# 运行并观察一次 DropIt 工作流
+
+本教程会启动后端、下载固定版本 CLAP 权重，并说明如何验证音频分析、曲库检索和 Agent。
+
+## 前提
+
+- 推荐 Linux x86_64、Python 3.11。Essentia 当前不提供可直接使用的 Windows 原生 wheel。
+- Windows 请使用 Docker Desktop 的 Linux 容器或 WSL。
+- 至少准备两首支持格式的本地歌曲，找相似至少需要一首参考歌和一首候选歌。
+- 对话需要服务端 DeepSeek 兼容 API Key；音频导入与分析不需要聊天 Key。
+
+## 第 1 步：用 Docker 启动
+
+在仓库根目录运行：
+
+```bash
+docker compose -f compose.backend.yaml build
+docker compose -f compose.backend.yaml run --rm api python -m backend.music.download_models
+docker compose -f compose.backend.yaml up
+```
+
+第二条命令显式下载 `laion/larger_clap_music` 的固定 revision 到数据卷。API 启动不会联网下载权重。
+第三条命令启动单个 Uvicorn worker，避免多个进程竞争同一 SQLite 任务。
+
+打开 `http://127.0.0.1:8765/api/docs`。`GET /api/health` 应返回 `status: ok`、
+`embedding_provider: clap` 和三个工具名。生产模式会关闭 OpenAPI 页面。
+
+## 第 2 步：配置聊天模型
+
+在根目录新建未提交的 `.env`：
+
+```dotenv
+DEEPSEEK_API_KEY=替换为服务端密钥
+DROPIT_MODEL=替换为账号实际可用的模型名
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+```
+
+Compose 读取当前 shell 环境做变量替换，不会自动把 `.env` 复制进镜像。修改后重启服务。
+如果只测试曲库和音频管线，可留空；聊天接口会明确返回 503。
+
+## 第 3 步：导入并等待分析
+
+通过 OpenAPI 页面依次执行：
+
+1. `POST /api/projects` 创建项目。
+2. `POST /api/projects/{id}/sources/resolve` 绑定一个来源。`folder_key` 是客户端生成的稳定标识，至少 16 字符；它不是服务端文件夹路径。
+3. `POST /api/projects/{id}/library/import-files`，传入返回的 `source_id` 与音频文件。
+4. 轮询返回 Job 的 `GET /api/jobs/{job_id}`，直到 `completed` 或 `failed`。
+5. `GET /api/projects/{id}/library` 检查两个独立状态：`analysis_status=analyzed` 和 `embedding_status=ready`。
+
+分析任务会先保存 Essentia 结果，再计算 CLAP 向量。因此 CLAP 失败不会抹掉 BPM、调性和能量。
+进程中断后的 queued/running 任务会在下次启动时恢复。显式把 `track_ids` 传给 analyze 接口会强制重跑；
+空数组只补齐尚未就绪的阶段。
+
+对应代码路径是 `workers/analyze_track.py → services/analysis_service.py →
+music/essentia_analyzer.py → music/indexer.py → music/clap_embedder.py`。Worker 只处理任务生命周期，
+单曲分析策略由 service 管理，向量的生成和写库由 indexer 分界。
+
+## 第 4 步：从对话调用三个工具
+
+创建项目对话后，依次尝试：
+
+```text
+列出当前项目 120 到 128 BPM 的歌曲。
+找出与「准确歌名」最相似的三首歌。
+用上面的候选排一个 45 分钟、逐步升温、118 到 132 BPM 的 Set。
+```
+
+第一句应让 Agent 用空 query 加数值过滤调用 `search_library`。第二句先解析歌曲 ID，再调用
+`find_similar_tracks`；重名时应先向用户确认。第三句调用 `generate_dj_set`，成功的 complete
+事件包含保存后的 Playlist。自然语言声音描述会被模型转成英文 CLAP query。
+
+全局曲库对话可以搜索和找相似，但不能保存 Set；需要进入项目。任何结果都只应出现 Tool 返回的
+track_id，不应出现模型编造的歌曲。
+
+## 验证
+
+不安装大模型的离线测试：
+
+```bash
+python -m pip install -r requirements.txt
+python -m pytest backend/tests -q
+```
+
+它用注入的轻量分析器/向量器验证任务、项目范围、检索、工具、API 和迁移，并用随机小型 CLAP
+模型检查 Transformers 4.x 接口。它不验证预训练模型的推荐质量。
+
+真实模型 smoke test：
+
+```bash
+python -m pip install -r requirements-audio.txt
+python -m backend.music.download_models
+DROPIT_TEST_AUDIO_MODELS=1 DROPIT_TEST_MODEL_DATA_DIR=data python -m pytest backend/tests/test_audio_models.py -q
+```
+
+PowerShell 设置环境变量的写法为 `$env:DROPIT_TEST_AUDIO_MODELS='1'` 与
+`$env:DROPIT_TEST_MODEL_DATA_DIR='data'`。测试使用合成点击/和弦音频，只证明推理链路可用，
+不代表真实曲库 BPM/调性准确率或检索排序质量。
+
+## 常见故障
+
+### Essentia 无法安装
+
+确认使用 Linux x86_64 / Python 3.11 与 `requirements-audio.txt`。Windows 原生环境改用 Docker/WSL。
+
+### 提示没有当前 CLAP 索引
+
+确认模型下载到与 `DROPIT_DATA_DIR` 相同的持久化目录，并查看曲目的 `embedding_error`。
+模型或 revision 改变会产生新 model key；旧向量不会复用，需要重新分析。
+
+### 搜索能用，风格检索不能用
+
+空 query 的元数据查询不需要向量；非空声音描述需要 CLAP。先等待 embedding ready。
+
+### Set 曲目数或时长不足
+
+检查歌曲是否 analyzed、BPM 是否落在范围内。风格 query 会进一步缩小候选，规划器不会悄悄
+放宽用户条件。Set 使用整曲时长，没有扣除混音重叠。
+
+### 前端行为与文档不一致
+
+本次分层重构只调整后端。先用 OpenAPI 和后端测试确认接口，再根据
+[接口参考](reference-api-tools-and-data.md)检查前端调用和 SSE 事件处理。
