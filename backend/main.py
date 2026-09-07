@@ -18,30 +18,31 @@ from backend.models import (
     AnalyzeRequest, Brief, ChatRequest, ChatResponse, ConversationCreate, ExportRequest,
     FolderBindRequest, Playlist, ProjectCreate, ProjectUpdate, ReorderRequest, TrackUpdate,
 )
-from backend.music.clap_embedder import ClapEmbedder, MusicEmbedder
-from backend.music.essentia_analyzer import EssentiaAnalyzer
-from backend.agent.retriever import RagLibrary
-from backend.services.set_planner import generate_playlist, render_export
+from backend.music.librosa_analyzer import LibrosaAnalyzer
+from backend.music.text_models import (
+    SentenceTransformerEmbedder, SmallTextDescriptor, TextEmbedder, TrackDescriptor,
+)
 from backend.repositories import GLOBAL_PROJECT_ID, DropItStore
-from backend.agent.tools import DropItToolRegistry
+from backend.agent.tools import DropItToolRegistry, generate_playlist, render_export
 
 
 SUPPORTED_AUDIO = {".mp3", ".wav", ".flac", ".aiff", ".aif", ".m4a"}
 logger = logging.getLogger("dropit")
 
 
-def create_app(settings: Settings | None = None, *, embedder: MusicEmbedder | None = None,
-               analyzer: EssentiaAnalyzer | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, *, embedder: TextEmbedder | None = None,
+               descriptor: TrackDescriptor | None = None,
+               analyzer: LibrosaAnalyzer | None = None) -> FastAPI:
     settings = settings or Settings()
     settings.configure_langsmith()
     settings.data_dir.mkdir(parents=True, exist_ok=True)
-    # Keep long-lived dependencies on the app so every route uses one SQLite/RAG/job context.
+    # Keep long-lived dependencies on the app so every route uses one SQLite/text-RAG/job context.
     store = DropItStore(str(settings.data_dir / "dropit.db"))
-    embedder = embedder or ClapEmbedder(settings)
-    rag = RagLibrary(store, embedder)
-    registry = DropItToolRegistry(store, rag)
+    embedder = embedder or SentenceTransformerEmbedder(settings)
+    descriptor = descriptor or SmallTextDescriptor(settings)
+    registry = DropItToolRegistry(store, embedder)
     copilot = DropItAgent(store, registry, settings)
-    jobs = JobRunner(store, embedder, analyzer)
+    jobs = JobRunner(store, embedder, descriptor, analyzer)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -53,12 +54,11 @@ def create_app(settings: Settings | None = None, *, embedder: MusicEmbedder | No
             jobs.close()
             store.close()
 
-    app = FastAPI(title="DropIt DJ Agent API", version="1.0.0", lifespan=lifespan,
+    app = FastAPI(title="DropIt DJ Agent API", version="2.0.0", lifespan=lifespan,
                   docs_url="/api/docs" if settings.environment != "production" else None,
                   redoc_url=None)
     app.state.settings = settings
     app.state.store = store
-    app.state.rag = rag
     app.state.registry = registry
     app.state.copilot = copilot
     app.state.jobs = jobs
@@ -91,12 +91,12 @@ def create_app(settings: Settings | None = None, *, embedder: MusicEmbedder | No
 
     @app.get("/api/health")
     def health():
-        return {"status": "ok", "version": "1.0.0", "agent_framework": "langchain.create_agent",
+        return {"status": "ok", "version": "2.0.0", "agent_framework": "langchain.create_agent",
                 "tools": registry.names, "model_configured": copilot.model_configured,
                 # This is display-only metadata. Credentials remain server-side.
                 "model_name": settings.model_name,
                 "model_source": "system",
-                "embedding_provider": rag.provider}
+                "embedding_provider": registry.provider}
 
     @app.get("/api/projects")
     def list_projects():
@@ -137,6 +137,7 @@ def create_app(settings: Settings | None = None, *, embedder: MusicEmbedder | No
     def delete_conversation(project_id: str, conversation_id: str):
         if not store.delete_conversation(project_id, conversation_id):
             raise HTTPException(409, "项目至少需要保留一个对话")
+        copilot.forget(project_id, conversation_id)
         return Response(status_code=204)
 
     @app.get("/api/chat/conversations")
@@ -151,6 +152,7 @@ def create_app(settings: Settings | None = None, *, embedder: MusicEmbedder | No
     def delete_global_conversation(conversation_id: str):
         if not store.delete_conversation(GLOBAL_PROJECT_ID, conversation_id):
             raise HTTPException(409, "普通对话至少需要保留一个会话")
+        copilot.forget(GLOBAL_PROJECT_ID, conversation_id)
         return Response(status_code=204)
 
     @app.get("/api/chat/conversations/{conversation_id}/messages")
@@ -264,8 +266,11 @@ def create_app(settings: Settings | None = None, *, embedder: MusicEmbedder | No
         project_or_404(store, project_id)
         if not store.tracks_by_ids([track_id], project_id):
             raise HTTPException(404, "曲目不存在")
-        # Audio vectors do not depend on edited tags; RAG reads current database facts.
-        return store.update_track(track_id, body)
+        # BPM/key/energy corrections affect the retrieval document, so rebuild only description + embedding.
+        updated = store.update_track(track_id, body)
+        job = store.create_job(project_id, "reindex", {"track_ids": [track_id]}, 1)
+        jobs.submit(job.id)
+        return updated
 
     @app.delete("/api/projects/{project_id}/library/{track_id}", status_code=204)
     def remove_track(project_id: str, track_id: str):

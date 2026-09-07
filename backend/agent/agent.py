@@ -12,6 +12,8 @@ from backend.models import ChatMessage, Playlist, ToolEvent, ToolResult
 from backend.repositories import DropItStore
 from backend.agent.prompts import SYSTEM_PROMPT
 from backend.agent.tools import DropItToolRegistry
+from backend.agent.intend import IntentRecognizer
+from backend.agent.memory import ShortTermMemory
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +26,12 @@ class ModelNotConfiguredError(RuntimeError):
 
 
 class DropItAgent:
-    def __init__(self, store: DropItStore, registry: DropItToolRegistry, settings: Settings):
+    def __init__(self, store: DropItStore, registry: DropItToolRegistry, settings: Settings,
+                 *, memory: ShortTermMemory | None = None,
+                 intent: IntentRecognizer | None = None):
         self.store, self.registry, self.settings = store, registry, settings
+        self.memory = memory or ShortTermMemory()
+        self.intent = intent or IntentRecognizer()
         self.model_configured = settings.model_configured
 
     def require_model(self) -> None:
@@ -41,17 +47,31 @@ class DropItAgent:
         self.require_model()
         user = self.store.add_message(project_id, conversation_id, "user", text)
         yield {"type": "user_saved", "message": user.model_dump(mode="json")}
-        yield {"type": "status", "label": "正在思考"}
-        history = self.store.list_messages(project_id, conversation_id, limit=40)
-        messages = [{"role": item.role, "content": item.content} for item in history]
+        recognized = self.intent.recognize(text)
+        yield {"type": "status", "label": "正在思考", "intent": recognized.name.value}
+        memory_key = f"{project_id}:{conversation_id}"
+        if not self.memory.has(memory_key):
+            history = self.store.list_messages(
+                project_id, conversation_id, limit=self.memory.max_messages
+            )
+            self.memory.seed(memory_key, (
+                {"role": item.role, "content": item.content} for item in history
+            ))
+        else:
+            self.memory.remember(memory_key, "user", text)
+        messages = self.memory.messages(memory_key)
         parts: list[str] = []
         final_text = ""
         tool_events: list[ToolEvent] = []
         playlist = None
 
         try:
+            intent_prompt = (
+                f"\nCurrent intent hint: {recognized.name.value} "
+                f"(confidence {recognized.confidence:.2f}). {recognized.guidance}"
+            )
             agent = create_agent(model=self._chat_model(), tools=self.registry.tools_for(project_id),
-                                 system_prompt=SYSTEM_PROMPT)
+                                 system_prompt=SYSTEM_PROMPT + intent_prompt)
             async for event in agent.astream_events(
                 {"messages": messages}, config={"recursion_limit": 16}, version="v2"
             ):
@@ -84,8 +104,12 @@ class DropItAgent:
         else:
             content = final_text.strip() or "".join(parts).strip() or "未收到有效回答，请重试。"
         message = self.store.add_message(project_id, conversation_id, "assistant", content, tool_events)
+        self.memory.remember(memory_key, "assistant", content)
         yield {"type": "complete", "message": message.model_dump(mode="json"),
                "playlist": playlist.model_dump(mode="json") if playlist else None}
+
+    def forget(self, project_id: str, conversation_id: str) -> None:
+        self.memory.forget(f"{project_id}:{conversation_id}")
 
     async def chat(self, project_id: str, conversation_id: str,
                    text: str) -> tuple[ChatMessage, Playlist | None]:

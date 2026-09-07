@@ -1,4 +1,4 @@
-"""Repository contract for versioned music embeddings."""
+"""Repository contract for versioned song-description embeddings."""
 
 from typing import Protocol
 

@@ -338,11 +338,13 @@ class SqliteRepository:
             self.connection.execute(
                 """UPDATE tracks SET title=?, artist=?, duration_sec=?, bpm=?, musical_key=?,
                    camelot_key=?, energy=?, bpm_confidence=?, key_confidence=?, analysis_status=?,
-                   analysis_error=?, analyzer=?, analysis_details=?, updated_at=? WHERE id=?""",
+                   analysis_error=?, analyzer=?, analysis_details=?, description=?, description_model=?,
+                   updated_at=? WHERE id=?""",
                 (track.title, track.artist, track.duration_sec, track.bpm, track.key, track.camelot_key,
                  track.energy, track.bpm_confidence, track.key_confidence, track.analysis_status,
                  track.analysis_error, track.analyzer,
-                 json.dumps(track.analysis_details), _now(), track.id),
+                 json.dumps(track.analysis_details), track.description, track.description_model,
+                 _now(), track.id),
             )
             self.connection.commit()
         return self.get_track(track.id)  # type: ignore[return-value]
@@ -351,7 +353,8 @@ class SqliteRepository:
         with self.lock:
             cursor = self.connection.execute(
                 """UPDATE tracks SET title=?, artist=?, bpm=?, musical_key=?, camelot_key=?,
-                   energy=?, updated_at=? WHERE id=?""",
+                   energy=?, description='', description_model='', embedding_status='pending',
+                   embedding_model='', embedding_error=NULL, updated_at=? WHERE id=?""",
                 (update.title.strip(), update.artist.strip(), update.bpm, update.key.strip(),
                  update.camelot_key.strip(), update.energy, _now(), track_id),
             )
@@ -532,6 +535,8 @@ class SqliteRepository:
             bpm_confidence=row["bpm_confidence"], key_confidence=row["key_confidence"],
             analysis_status=row["analysis_status"], analysis_error=row["analysis_error"],
             analyzer=row["analyzer"], analysis_details=json.loads(row["analysis_details"]),
+            description=row["description"] if "description" in keys else "",
+            description_model=row["description_model"] if "description_model" in keys else "",
             embedding_status=row["embedding_status"], embedding_model=row["embedding_model"],
             embedding_error=row["embedding_error"],
             created_at=row["created_at"], updated_at=row["updated_at"] if "updated_at" in keys else None,

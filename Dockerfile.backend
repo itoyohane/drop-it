@@ -6,6 +6,6 @@ COPY requirements.txt requirements-audio.txt ./
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -r requirements-audio.txt
 COPY backend ./backend
-ENV DROPIT_DATA_DIR=/app/data DROPIT_CLAP_LOCAL_FILES_ONLY=true
+ENV DROPIT_DATA_DIR=/app/data DROPIT_MUSIC_MODELS_LOCAL_FILES_ONLY=true
 EXPOSE 8765
 CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8765"]

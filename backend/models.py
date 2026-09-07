@@ -21,6 +21,8 @@ class Track(BaseModel):
     analysis_error: str | None = None
     analyzer: str = ""
     analysis_details: dict[str, Any] = Field(default_factory=dict)
+    description: str = ""
+    description_model: str = ""
     embedding_status: Literal["pending", "ready", "failed"] = "pending"
     embedding_model: str = ""
     embedding_error: str | None = None
@@ -178,7 +180,7 @@ class ToolResult(BaseModel):
 
 
 class MusicFilters(BaseModel):
-    """Exact catalog constraints, kept separate from the CLAP sound description."""
+    """Exact catalog constraints, kept separate from the semantic sound description."""
 
     title: str = ""
     artist: str = ""
@@ -207,7 +209,7 @@ class MusicFilters(BaseModel):
 class MusicMatch(BaseModel):
     track: Track
     score: float | None = None
-    audio_similarity: float | None = None
+    description_similarity: float | None = None
 
     def context(self) -> dict[str, Any]:
         """Only music evidence enters the model context; never local file paths."""
@@ -216,6 +218,8 @@ class MusicMatch(BaseModel):
             "bpm": self.track.bpm, "key": self.track.key, "camelot_key": self.track.camelot_key,
             "energy": self.track.energy, "duration_sec": self.track.duration_sec,
             "analysis_status": self.track.analysis_status,
+            "description": self.track.description,
+            "description_model": self.track.description_model,
             "embedding_status": self.track.embedding_status,
-            "score": self.score, "audio_similarity": self.audio_similarity,
+            "score": self.score, "description_similarity": self.description_similarity,
         }

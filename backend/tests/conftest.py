@@ -10,31 +10,40 @@ os.environ["DROPIT_DATA_DIR"] = str(Path.cwd() / "data" / "test-bootstrap")
 os.environ["DEEPSEEK_API_KEY"] = ""
 
 from backend.models import Track
-from backend.agent.retriever import RagLibrary
+from backend.agent.tools import DropItToolRegistry
 from backend.repositories import DropItStore
 
 
 class FakeEmbedder:
     """Only for tests; production has no fake vector fallback."""
-    model_key = "test-clap@1"
+    model_key = "test-text@1"
     dimensions = 3
 
     def __init__(self):
-        self.audio_calls = 0
         self.text_calls = 0
+        self.values: list[str] = []
         self.fail = False
 
-    def audio(self, path):
-        self.audio_calls += 1
+    def text(self, value):
+        self.text_calls += 1
+        self.values.append(value)
         if self.fail:
             raise RuntimeError("test model unavailable")
         return np.array([1, 0, 0], dtype=np.float32)
 
-    def text(self, query):
-        self.text_calls += 1
+
+class FakeDescriptor:
+    model_key = "test-descriptor@1"
+
+    def __init__(self):
+        self.calls = 0
+        self.fail = False
+
+    def describe(self, track):
+        self.calls += 1
         if self.fail:
-            raise RuntimeError("test model unavailable")
-        return np.array([1, 0, 0], dtype=np.float32)
+            raise RuntimeError("test descriptor unavailable")
+        return f"{track.bpm:.1f} BPM {track.key} energy {track.energy:.2f}"
 
 
 class FakeAnalyzer:
@@ -45,8 +54,9 @@ class FakeAnalyzer:
         self.calls += 1
         return track.model_copy(update={
             "bpm": 124, "key": "A minor", "camelot_key": "8A", "energy": .6,
-            "duration_sec": 240, "analysis_status": "analyzed", "analyzer": "essentia:test",
-            "analysis_details": {"beat_positions": [0.0, .5], "energy_method": "test"},
+            "duration_sec": 240, "analysis_status": "analyzed", "analyzer": "librosa:test",
+            "analysis_details": {"beat_positions": [0.0, .5], "energy_method": "test",
+                                 "spectral_centroid_hz": 1800, "onset_strength": 1.2},
         })
 
 
@@ -56,16 +66,17 @@ def library(tmp_path):
     project = store.create_project("Local")
     other = store.create_project("Other")
     embedder = FakeEmbedder()
-    rag = RagLibrary(store, embedder)
-    yield store, project, other, embedder, rag
+    registry = DropItToolRegistry(store, embedder)
+    yield store, project, other, embedder, registry
     store.close()
 
 
-def add_track(store, project, name, vector=None, model="test-clap@1", **values):
+def add_track(store, project, name, vector=None, model="test-text@1", **values):
     fields = dict(
         id=name, title=name, artist="Mira", filename=f"{name}.wav", path=f"/music/{name}.wav",
         bpm=124, key="A minor", camelot_key="8A", energy=.6, duration_sec=240,
-        analysis_status="analyzed", analyzer="essentia:test",
+        analysis_status="analyzed", analyzer="librosa:test", description=f"description for {name}",
+        description_model="test-descriptor@1",
     )
     fields.update(values)
     track = Track(**fields)

@@ -1,6 +1,7 @@
 import asyncio
 import io
 import sqlite3
+import time
 import wave
 
 import numpy as np
@@ -15,11 +16,12 @@ from backend.config import Settings
 from backend.workers.analyze_track import JobRunner
 from backend.main import create_app
 from backend.models import Brief, MusicFilters, ToolResult, TrackUpdate
-from backend.music.clap_embedder import unit_vector
-from backend.services.set_planner import is_camelot_compatible, generate_playlist, render_export
+from backend.music.text_models import unit_vector
 from backend.repositories import GLOBAL_PROJECT_ID, DropItStore
-from backend.agent.tools import DropItToolRegistry
-from backend.tests.conftest import FakeAnalyzer, FakeEmbedder, add_track
+from backend.agent.tools import (
+    DropItToolRegistry, generate_playlist, is_camelot_compatible, render_export,
+)
+from backend.tests.conftest import FakeAnalyzer, FakeDescriptor, FakeEmbedder, add_track
 
 
 def invoke(registry, project_id, name, **arguments):
@@ -57,7 +59,7 @@ def test_similarity_excludes_reference_and_applies_constraints(library):
     add_track(store, other, "foreign", [1, 0, 0])
     matches = rag.similar(project.id, "reference", MusicFilters(bpm_max=130))
     assert [m.track.id for m in matches] == ["near"]
-    assert matches[0].audio_similarity > .99
+    assert matches[0].description_similarity > .99
     with pytest.raises(ValueError, match="当前曲库"):
         rag.similar(project.id, "foreign")
 
@@ -71,21 +73,29 @@ def test_removing_membership_hides_existing_vector(library):
     assert [m.track.id for m in rag.search(other.id, "techno")] == [track.id]
 
 
-def test_metadata_edit_is_visible_without_reembedding(library):
+def test_metadata_edit_invalidates_and_rebuilds_description_embedding(library):
     store, project, _, embedder, rag = library
     track = add_track(store, project, "original", [1, 0, 0])
     store.update_track(track.id, TrackUpdate(title="Corrected", artist="New artist", bpm=122,
                                             key="A minor", camelot_key="8A", energy=.4))
+    with pytest.raises(ValueError, match="索引"):
+        rag.search(project.id, "techno")
+    descriptor = FakeDescriptor()
+    runner = JobRunner(store, embedder, descriptor, FakeAnalyzer())
+    try:
+        assert runner._analyze(track.id)
+    finally:
+        runner.close()
     match = rag.search(project.id, "techno")[0]
     assert match.track.title == "Corrected"
     assert match.track.bpm == 122
-    assert embedder.audio_calls == 0
+    assert descriptor.calls == 1 and embedder.text_calls == 2
     assert "path" not in match.context()
 
 
 def test_missing_or_wrong_model_never_falls_back_to_fake_matches(library):
     store, project, _, _, rag = library
-    add_track(store, project, "old-model", [1, 0, 0], model="old-clap")
+    add_track(store, project, "old-model", [1, 0, 0], model="old-text-model")
     with pytest.raises(ValueError, match="索引"):
         rag.search(project.id, "techno")
     with pytest.raises(ValueError, match="索引"):
@@ -107,7 +117,7 @@ def test_dimension_mismatch_is_explicit(library):
 
 def test_tools_have_exactly_requested_schema_and_server_scope(library):
     store, project, _, _, rag = library
-    registry = DropItToolRegistry(store, rag)
+    registry = rag
     assert registry.names == ["search_library", "find_similar_tracks", "generate_dj_set"]
     for tool in registry.tools_for(project.id):
         assert "project_id" not in tool.args
@@ -118,7 +128,7 @@ def test_tools_have_exactly_requested_schema_and_server_scope(library):
 def test_tools_ground_responses_and_report_missing_index(library):
     store, project, _, _, rag = library
     add_track(store, project, "Signal")
-    registry = DropItToolRegistry(store, rag)
+    registry = rag
     result = invoke(registry, project.id, "search_library", filters={"title": "Signal"})
     assert result.ok and result.data["tracks"][0]["track_id"] == "Signal"
     result = invoke(registry, project.id, "find_similar_tracks", track_id="Signal")
@@ -132,7 +142,7 @@ def test_set_tool_works_with_features_and_requires_index_for_style(library):
     for index, energy in enumerate((.3, .5, .8)):
         add_track(store, project, f"set-{index}", energy=energy)
     add_track(store, other, "foreign", energy=.4)
-    registry = DropItToolRegistry(store, rag)
+    registry = rag
     result = invoke(registry, project.id, "generate_dj_set", request="逐步升能量",
                     duration_min=10, bpm_min=120, bpm_max=130)
     assert result.ok
@@ -150,7 +160,7 @@ def test_set_tool_works_with_features_and_requires_index_for_style(library):
 def test_global_catalog_can_retrieve_but_not_save_set(library):
     store, project, _, _, rag = library
     add_track(store, project, "global-song", [1, 0, 0])
-    registry = DropItToolRegistry(store, rag)
+    registry = rag
     assert rag.search(GLOBAL_PROJECT_ID, "techno")[0].track.id == "global-song"
     assert not invoke(registry, GLOBAL_PROJECT_ID, "generate_dj_set", request="set").ok
 
@@ -160,7 +170,7 @@ def test_agent_selected_tracks_constrain_the_set(library):
     for name in ("chosen", "unselected"):
         add_track(store, project, name)
     add_track(store, other, "foreign")
-    registry = DropItToolRegistry(store, rag)
+    registry = rag
     result = invoke(registry, project.id, "generate_dj_set", request="selected songs", track_ids=["chosen"])
     assert result.ok and [t["track_id"] for t in result.data["tracks"]] == ["chosen"]
     result = invoke(registry, project.id, "generate_dj_set", request="invalid", track_ids=["foreign"])
@@ -176,11 +186,12 @@ def test_planner_preserves_camelot_transitions(library):
                for a, b in zip(playlist.tracks, playlist.tracks[1:]))
 
 
-def test_job_retains_features_on_embedding_failure_and_retries_only_clap(library):
+def test_job_retains_features_on_embedding_failure_and_retries_only_text_index(library):
     store, project, _, embedder, _ = library
     track = add_track(store, project, "pending", analysis_status="pending", analyzer="")
     analyzer = FakeAnalyzer()
-    runner = JobRunner(store, embedder, analyzer)
+    descriptor = FakeDescriptor()
+    runner = JobRunner(store, embedder, descriptor, analyzer)
     try:
         embedder.fail = True
         job = store.create_job(project.id, "analyze", {"track_ids": [track.id]}, 1)
@@ -195,11 +206,12 @@ def test_job_retains_features_on_embedding_failure_and_retries_only_clap(library
         runner._run(retry.id)
         assert store.get_job(retry.id).status == "completed"
         assert analyzer.calls == 1
-        assert embedder.audio_calls == 2
+        assert embedder.text_calls == 2
+        assert descriptor.calls == 1
         assert runner.ready(store.get_track(track.id))
         cached = store.create_job(project.id, "analyze", {"track_ids": [track.id]}, 1)
         runner._run(cached.id)
-        assert embedder.audio_calls == 2
+        assert embedder.text_calls == 2
     finally:
         runner.close()
 
@@ -212,7 +224,7 @@ def test_failed_reanalysis_hides_old_vector(library):
         def analyze(self, track):
             raise ValueError("bad audio")
 
-    runner = JobRunner(store, embedder, BrokenAnalyzer())
+    runner = JobRunner(store, embedder, FakeDescriptor(), BrokenAnalyzer())
     try:
         job = store.create_job(project.id, "analyze", {"track_ids": [track.id], "force": True}, 1)
         runner._run(job.id)
@@ -230,7 +242,7 @@ def test_vectors_persist_across_restart(tmp_path):
     store.close()
     reopened = DropItStore(path)
     try:
-        vector = reopened.music_vectors(project.id, "test-clap@1")["saved"]
+        vector = reopened.music_vectors(project.id, "test-text@1")["saved"]
         assert np.allclose(vector, [.6, .8, 0])
     finally:
         reopened.close()
@@ -250,7 +262,7 @@ def test_legacy_database_migration_preserves_songs(tmp_path):
         track = store.all_tracks("legacy-project")[0]
         assert track.title == "Old Song"
         assert track.embedding_status == "pending"
-        assert store.music_vectors("legacy-project", "test-clap@1") == {}
+        assert store.music_vectors("legacy-project", "test-text@1") == {}
     finally:
         store.close()
 
@@ -258,7 +270,7 @@ def test_legacy_database_migration_preserves_songs(tmp_path):
 def test_api_upload_analysis_and_metadata_update(tmp_path):
     settings = Settings(_env_file=None, DROPIT_DATA_DIR=tmp_path, DEEPSEEK_API_KEY="")
     embedder = FakeEmbedder()
-    app = create_app(settings, embedder=embedder, analyzer=FakeAnalyzer())
+    app = create_app(settings, embedder=embedder, descriptor=FakeDescriptor(), analyzer=FakeAnalyzer())
     audio = io.BytesIO()
     with wave.open(audio, "wb") as output:
         output.setnchannels(1)
@@ -273,16 +285,26 @@ def test_api_upload_analysis_and_metadata_update(tmp_path):
                                data={"source_id": source["id"]},
                                files={"files": ("Mira - Signal.wav", audio.getvalue(), "audio/wav")})
         assert response.status_code == 202
-        app.state.jobs.close()
-        job = client.get("/api/jobs/" + response.json()["job"]["id"]).json()
+        job_id = response.json()["job"]["id"]
+        for _ in range(100):
+            job = client.get("/api/jobs/" + job_id).json()
+            if job["status"] in {"completed", "failed"}:
+                break
+            time.sleep(.01)
         assert job["status"] == "completed"
         track = client.get(f"/api/projects/{project['id']}/library").json()["tracks"][0]
         assert track["title"] == "Signal" and track["embedding_status"] == "ready"
         patch = {"title": "Edited", "artist": "Mira", "bpm": 122, "key": "A minor",
                  "camelot_key": "8A", "energy": .5}
         assert client.patch(f"/api/projects/{project['id']}/library/{track['id']}", json=patch).status_code == 200
-        assert embedder.audio_calls == 1
-        assert app.state.rag.search(project["id"], "techno")[0].track.title == "Edited"
+        reindex = client.get(f"/api/projects/{project['id']}/jobs").json()["jobs"][0]
+        for _ in range(100):
+            reindex = client.get("/api/jobs/" + reindex["id"]).json()
+            if reindex["status"] in {"completed", "failed"}:
+                break
+            time.sleep(.01)
+        assert reindex["status"] == "completed" and embedder.text_calls == 2
+        assert app.state.registry.search(project["id"], "techno")[0].track.title == "Edited"
 
 
 def test_chat_unconfigured_does_not_persist_turn(tmp_path):
@@ -303,7 +325,7 @@ def test_agent_executes_real_langchain_tool_graph(library):
     store, project, _, _, rag = library
     add_track(store, project, "Signal", [1, 0, 0])
     add_track(store, project, "Similar", [.95, .1, 0])
-    registry = DropItToolRegistry(store, rag)
+    registry = rag
     settings = Settings(_env_file=None, DEEPSEEK_API_KEY="test-only")
     agent = DropItAgent(store, registry, settings)
 

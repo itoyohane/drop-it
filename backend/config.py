@@ -39,10 +39,21 @@ class Settings(BaseSettings):
     )
     max_upload_mb: int = Field(1024, ge=10, le=4096, validation_alias="DROPIT_MAX_UPLOAD_MB")
     max_upload_files: int = Field(500, ge=1, le=5000, validation_alias="DROPIT_MAX_UPLOAD_FILES")
-    clap_model: str = Field("laion/larger_clap_music", validation_alias="DROPIT_CLAP_MODEL")
-    clap_revision: str = Field("a0b4534", validation_alias="DROPIT_CLAP_REVISION")
-    clap_device: str = Field("cpu", validation_alias="DROPIT_CLAP_DEVICE")
-    clap_local_files_only: bool = Field(True, validation_alias="DROPIT_CLAP_LOCAL_FILES_ONLY")
+    description_model: str = Field("google/flan-t5-small", validation_alias="DROPIT_DESCRIPTION_MODEL")
+    description_model_revision: str = Field("main", validation_alias="DROPIT_DESCRIPTION_MODEL_REVISION")
+    text_embedding_model: str = Field(
+        "sentence-transformers/all-MiniLM-L6-v2", validation_alias="DROPIT_TEXT_EMBEDDING_MODEL"
+    )
+    text_embedding_model_revision: str = Field(
+        "main", validation_alias="DROPIT_TEXT_EMBEDDING_MODEL_REVISION"
+    )
+    text_embedding_dimensions: int = Field(
+        384, ge=1, le=4096, validation_alias="DROPIT_TEXT_EMBEDDING_DIMENSIONS"
+    )
+    music_model_device: str = Field("cpu", validation_alias="DROPIT_MUSIC_MODEL_DEVICE")
+    music_models_local_files_only: bool = Field(
+        True, validation_alias="DROPIT_MUSIC_MODELS_LOCAL_FILES_ONLY"
+    )
     log_level: str = Field("INFO", validation_alias="DROPIT_LOG_LEVEL")
 
     def configure_langsmith(self) -> None:

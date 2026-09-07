@@ -1,23 +1,23 @@
-"""Durable local jobs; one worker shares the audio models and serializes track updates."""
+"""Durable jobs for librosa analysis, song description generation, and text indexing."""
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 
-from backend.music.clap_embedder import MusicEmbedder
-from backend.music.essentia_analyzer import EssentiaAnalyzer
+from backend.music.indexer import MusicIndexer
+from backend.music.librosa_analyzer import LibrosaAnalyzer
+from backend.music.text_models import TextEmbedder, TrackDescriptor
 from backend.repositories import DropItStore
-from backend.services.analysis_service import AnalysisService
 
 logger = logging.getLogger(__name__)
 
 
 class JobRunner:
-    def __init__(self, store: DropItStore, embedder: MusicEmbedder,
-                 analyzer: EssentiaAnalyzer | None = None):
-        self.store, self.embedder = store, embedder
-        self.analysis = AnalysisService(store, store, store, embedder, analyzer)
-        self.analyzer = self.analysis.analyzer
+    def __init__(self, store: DropItStore, embedder: TextEmbedder,
+                 descriptor: TrackDescriptor, analyzer: LibrosaAnalyzer | None = None):
+        self.store, self.embedder, self.descriptor = store, embedder, descriptor
+        self.analyzer = analyzer or LibrosaAnalyzer()
+        self.indexer = MusicIndexer(store, embedder)
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="dropit-analysis")
         self._submitted: set[str] = set()
         self._lock = Lock()
@@ -59,8 +59,9 @@ class JobRunner:
                 self.store.update_source_status(source_id, "ready" if ready else "failed")
             self.store.update_job(
                 job_id, status="failed" if failed else "completed", progress=len(tracks),
-                message=f"已处理 {len(tracks)} 首，{failed} 首分析或索引失败。" if failed else "音乐分析和 CLAP 索引完成。",
-                error=f"{failed} 首失败；详情见曲目的分析/索引错误。" if failed else None,
+                message=(f"已处理 {len(tracks)} 首，{failed} 首分析、描述或索引失败。"
+                         if failed else "librosa 分析和歌曲描述索引完成。"),
+                error=f"{failed} 首失败；详情见曲目的分析/描述/索引错误。" if failed else None,
             )
         except Exception as exc:
             logger.exception("music_job_failed")
@@ -70,7 +71,49 @@ class JobRunner:
                 self._submitted.discard(job_id)
 
     def ready(self, track) -> bool:
-        return self.analysis.ready(track)
+        return (track.analysis_status == "analyzed" and track.analyzer.startswith("librosa:")
+                and bool(track.description) and track.description_model == self.descriptor.model_key
+                and track.embedding_status == "ready"
+                and track.embedding_model == self.embedder.model_key)
 
     def _analyze(self, track_id: str, force: bool = False) -> bool:
-        return self.analysis.analyze(track_id, force)
+        track = self.store.get_track(track_id)
+        if track is None:
+            return False
+        if not force and self.ready(track):
+            return True
+        needs_features = force or track.analysis_status != "analyzed" or not track.analyzer.startswith("librosa:")
+        needs_description = (needs_features or not track.description
+                             or track.description_model != self.descriptor.model_key)
+        if needs_features:
+            self.store.mark_track_analyzing(track_id)
+            try:
+                track = self.analyzer.analyze(track)
+            except Exception as exc:
+                logger.exception("librosa_analysis_failed")
+                self.store.update_track_analysis(track.model_copy(update={
+                    "analysis_status": "failed", "analysis_error": str(exc)[:500],
+                    "description": "", "description_model": "",
+                }))
+                return False
+        if needs_description:
+            try:
+                description = self.descriptor.describe(track)
+                track = track.model_copy(update={
+                    "description": description, "description_model": self.descriptor.model_key,
+                })
+                track = self.store.update_track_analysis(track)
+            except Exception as exc:
+                logger.exception("song_description_failed")
+                self.store.update_track_analysis(track.model_copy(update={
+                    "description": "", "description_model": "",
+                }))
+                self.store.fail_embedding(track.id, str(exc))
+                return False
+        try:
+            self.indexer.index(track.id, track.description)
+        except Exception as exc:
+            logger.exception("description_index_failed")
+            self.store.fail_embedding(track.id, str(exc))
+            return False
+        return True

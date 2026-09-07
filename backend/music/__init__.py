@@ -1,5 +1,10 @@
-from backend.music.clap_embedder import ClapEmbedder, MusicEmbedder
-from backend.music.essentia_analyzer import EssentiaAnalyzer
+from backend.music.librosa_analyzer import LibrosaAnalyzer
 from backend.music.indexer import MusicIndexer
+from backend.music.text_models import (
+    SentenceTransformerEmbedder, SmallTextDescriptor, TextEmbedder, TrackDescriptor,
+)
 
-__all__ = ["ClapEmbedder", "EssentiaAnalyzer", "MusicEmbedder", "MusicIndexer"]
+__all__ = [
+    "LibrosaAnalyzer", "MusicIndexer", "SentenceTransformerEmbedder", "SmallTextDescriptor",
+    "TextEmbedder", "TrackDescriptor",
+]

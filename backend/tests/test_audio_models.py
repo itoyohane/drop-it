@@ -1,97 +1,115 @@
-"""Model adapter contracts plus an opt-in real Essentia/CLAP smoke test."""
+"""Contracts for librosa analysis, small description generation, and text embeddings."""
 
 import os
 import sys
-from types import ModuleType
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 from backend.config import Settings
 from backend.models import Track
-from backend.music.clap_embedder import ClapEmbedder
-from backend.music.essentia_analyzer import EssentiaAnalyzer
+from backend.music.librosa_analyzer import LibrosaAnalyzer, _key_from_chroma
+from backend.music.text_models import SentenceTransformerEmbedder, SmallTextDescriptor
 
 
-def test_essentia_maps_flat_keys_and_preserves_raw_confidence(monkeypatch):
-    import backend.music.essentia_analyzer as adapter
+def test_key_detection_maps_pitch_to_camelot(monkeypatch):
+    import backend.music.librosa_analyzer as adapter
 
-    standard = ModuleType("essentia.standard")
-    standard.RhythmExtractor2013 = lambda **kwargs: lambda y: (124, [0, .5], 3.2, [], [])
-    standard.KeyExtractor = lambda **kwargs: lambda y: ("Bb", "minor", .7)
-    standard.RMS = lambda: lambda y: .1
-    root = ModuleType("essentia")
-    root.standard = standard
-    monkeypatch.setitem(sys.modules, "essentia", root)
-    monkeypatch.setitem(sys.modules, "essentia.standard", standard)
+    chroma = np.zeros((12, 4), dtype=np.float32)
+    chroma[10] = 1
+    monkeypatch.setattr(adapter, "load_audio", lambda path: (np.ones(44100, dtype=np.float32) * .1, 22050))
     monkeypatch.setattr(adapter, "version", lambda name: "test")
-    monkeypatch.setattr(adapter, "load_audio", lambda path, sr: np.ones(sr * 2, dtype=np.float32))
-    result = EssentiaAnalyzer().analyze(Track(id="a", title="A", artist="B", filename="a.wav", path="a.wav"))
-    assert result.key == "A# minor" and result.camelot_key == "3A"
-    assert result.bpm_confidence == 3.2
-    assert result.analysis_details["rms_dbfs"] == -20
-    assert result.duration_sec == 2
-    assert result.analyzer == "essentia:test:dj-v1"
+    fake_librosa = SimpleNamespace(
+        onset=SimpleNamespace(onset_strength=lambda **kwargs: np.array([1., 2., 1.])),
+        beat=SimpleNamespace(beat_track=lambda **kwargs: (np.array([124.]), np.array([0, 10]))),
+        feature=SimpleNamespace(
+            chroma_cqt=lambda **kwargs: chroma,
+            rms=lambda **kwargs: np.array([[.1, .1]]),
+            spectral_centroid=lambda **kwargs: np.array([[1800.]]),
+            spectral_bandwidth=lambda **kwargs: np.array([[900.]]),
+            spectral_rolloff=lambda **kwargs: np.array([[3000.]]),
+            zero_crossing_rate=lambda audio: np.array([[.05]]),
+        ),
+        get_duration=lambda **kwargs: 2.,
+        frames_to_time=lambda frames, **kwargs: np.array([0., .5]),
+    )
+    monkeypatch.setitem(sys.modules, "librosa", fake_librosa)
+
+    result = LibrosaAnalyzer().analyze(
+        Track(id="a", title="A", artist="B", filename="a.wav", path="a.wav")
+    )
+    key, scale, _ = _key_from_chroma(chroma)
+    assert result.key == f"{key} {scale}"
+    assert result.camelot_key.endswith("A" if scale == "minor" else "B")
+    assert result.bpm == 124 and result.duration_sec == 2
+    assert result.analysis_details["spectral_centroid_hz"] == 1800
+    assert result.analyzer == "librosa:test:dj-v1"
 
 
-def test_clap_adapter_with_real_transformers_tensor_contract(monkeypatch):
-    transformers = pytest.importorskip("transformers")
-    if int(transformers.__version__.split(".")[0]) != 4:
-        pytest.skip("requires the project's transformers<5 dependency")
+def test_small_descriptor_keeps_measured_facts(monkeypatch):
     torch = pytest.importorskip("torch")
-    from transformers import ClapConfig, ClapFeatureExtractor, ClapModel
-    from transformers.feature_extraction_utils import BatchFeature
 
-    # Small random model validates the real inference API, not retrieval quality.
-    model = ClapModel(ClapConfig(
-        audio_config={"depths": [1, 1, 1, 1], "num_attention_heads": [1, 2, 4, 8],
-                      "patch_embeds_hidden_size": 8, "hidden_size": 64},
-        text_config={"vocab_size": 20, "hidden_size": 32, "intermediate_size": 64,
-                     "num_hidden_layers": 1, "num_attention_heads": 4},
-        projection_dim=512,
-    )).eval()
-    extractor = ClapFeatureExtractor(truncation="rand_trunc")
+    class Tokenizer:
+        def __call__(self, prompt, **kwargs):
+            assert "124.0 BPM" in prompt and "do not invent" in prompt
+            return {"input_ids": torch.tensor([[1, 2]])}
 
-    class Processor:
-        def __call__(self, *, audios=None, text=None, **kwargs):
-            if audios is not None:
-                assert len(audios) == 3
-                assert all(len(clip) <= 480000 for clip in audios)
-                return extractor(audios, **kwargs)
-            return BatchFeature({"input_ids": torch.tensor([[0, 5, 2]]),
-                                 "attention_mask": torch.ones(1, 3, dtype=torch.long)})
+        def decode(self, tokens, **kwargs):
+            return "steady mid-energy tonal track"
 
-    embedder = ClapEmbedder(Settings(_env_file=None))
-    embedder._model, embedder._processor = model, Processor()
-    samples = np.sin(np.arange(48000 * 30, dtype=np.float32) / 50) * .1
-    monkeypatch.setattr("backend.music.clap_embedder.load_audio", lambda path, sr: samples)
-    previous_threads = torch.get_num_threads()
-    torch.set_num_threads(1)
-    try:
-        audio, text = embedder.audio("test.wav"), embedder.text("dark electronic music")
-    finally:
-        torch.set_num_threads(previous_threads)
-    assert audio.shape == text.shape == (512,)
-    assert np.isclose(np.linalg.norm(audio), 1) and np.isclose(np.linalg.norm(text), 1)
+    class Model:
+        def generate(self, **kwargs):
+            return torch.tensor([[3, 4]])
+
+    descriptor = SmallTextDescriptor(Settings(_env_file=None))
+    descriptor._tokenizer, descriptor._model = Tokenizer(), Model()
+    track = Track(id="a", title="A", artist="B", filename="a.wav", path="a.wav", bpm=124,
+                  key="A minor", camelot_key="8A", energy=.6,
+                  analysis_details={"spectral_centroid_hz": 1800, "onset_strength": 1.2})
+    text = descriptor.describe(track)
+    assert "124.0 BPM" in text and "energy 0.60" in text
+    assert text.endswith("steady mid-energy tonal track")
+
+
+def test_sentence_transformer_adapter_normalizes_and_checks_dimension(monkeypatch):
+    class Model:
+        def __init__(self, *args, **kwargs):
+            assert kwargs["local_files_only"] is True
+
+        def get_sentence_embedding_dimension(self):
+            return 3
+
+        def encode(self, value, **kwargs):
+            assert value == "dark electronic music"
+            return np.array([3, 4, 0], dtype=np.float32)
+
+    monkeypatch.setitem(__import__("sys").modules, "sentence_transformers",
+                        SimpleNamespace(SentenceTransformer=Model))
+    embedder = SentenceTransformerEmbedder(
+        Settings(_env_file=None, DROPIT_TEXT_EMBEDDING_DIMENSIONS=3)
+    )
+    result = embedder.text("dark electronic music")
+    assert np.allclose(result, [.6, .8, 0])
 
 
 @pytest.mark.skipif(os.getenv("DROPIT_TEST_AUDIO_MODELS") != "1",
-                    reason="requires Essentia and cached pretrained CLAP weights")
+                    reason="requires cached pretrained description and embedding models")
 def test_real_audio_models(tmp_path):
     import soundfile as sf
 
-    sr = 44100
+    sr = 22050
     t = np.arange(sr * 20) / sr
     audio = .05 * (np.sin(2 * np.pi * 220 * t) + np.sin(2 * np.pi * 261.63 * t))
     for start in range(0, len(audio), sr // 2):
         audio[start:start + 512] += .8 * np.hanning(512)
     path = tmp_path / "clicks.wav"
     sf.write(path, audio, sr)
-    track = Track(id="clicks", title="Clicks", artist="Test", filename=path.name, path=str(path))
-    result = EssentiaAnalyzer().analyze(track)
-    assert 110 <= result.bpm <= 130
-    assert result.analysis_status == "analyzed"
-    # Use configured data_dir so this test sees explicitly downloaded weights.
-    embedder = ClapEmbedder(Settings(DROPIT_DATA_DIR=os.getenv("DROPIT_TEST_MODEL_DATA_DIR", "data")))
-    assert embedder.audio(str(path)).shape == (512,)
-    assert embedder.text("rhythmic music").shape == (512,)
+    settings = Settings(DROPIT_DATA_DIR=os.getenv("DROPIT_TEST_MODEL_DATA_DIR", "data"))
+    track = LibrosaAnalyzer().analyze(
+        Track(id="clicks", title="Clicks", artist="Test", filename=path.name, path=str(path))
+    )
+    description = SmallTextDescriptor(settings).describe(track)
+    vector = SentenceTransformerEmbedder(settings).text(description)
+    assert track.analysis_status == "analyzed" and description
+    assert vector.shape == (settings.text_embedding_dimensions,)
