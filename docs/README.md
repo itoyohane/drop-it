@@ -1,6 +1,6 @@
 # DropIt 文档
 
-以当前工作区的后端代码为准：一个 LangChain Agent，三个音乐工具，librosa 分析，小模型歌曲描述 RAG，SQLite 持久化。
+以当前工作区的后端代码为准：一个 LangChain Agent，三个音乐工具，librosa 分析，DeepSeek + DashScope 歌曲描述 RAG，SQLite 元数据与 Chroma 向量持久化。
 
 ## 阅读顺序
 

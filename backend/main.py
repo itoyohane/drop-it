@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.agent.agent import DropItAgent, MODEL_NOT_CONFIGURED_ERROR
+from backend.agent.intent import IntentRecognizer, OllamaIntentFallback
 from backend.audio import pending_track, sha256_file
 from backend.config import Settings
 from backend.workers.analyze_track import JobRunner
@@ -20,7 +21,7 @@ from backend.models import (
 )
 from backend.music.librosa_analyzer import LibrosaAnalyzer
 from backend.music.text_models import (
-    SentenceTransformerEmbedder, SmallTextDescriptor, TextEmbedder, TrackDescriptor,
+    DashScopeTextEmbedder, DeepSeekTrackDescriptor, TextEmbedder, TrackDescriptor,
 )
 from backend.repositories import GLOBAL_PROJECT_ID, DropItStore
 from backend.agent.tools import DropItToolRegistry, generate_playlist, render_export
@@ -36,12 +37,30 @@ def create_app(settings: Settings | None = None, *, embedder: TextEmbedder | Non
     settings = settings or Settings()
     settings.configure_langsmith()
     settings.data_dir.mkdir(parents=True, exist_ok=True)
-    # Keep long-lived dependencies on the app so every route uses one SQLite/text-RAG/job context.
-    store = DropItStore(str(settings.data_dir / "dropit.db"))
-    embedder = embedder or SentenceTransformerEmbedder(settings)
-    descriptor = descriptor or SmallTextDescriptor(settings)
+    # SQLite remains the relational catalog; Chroma is the durable vector store used
+    # by the RAG retriever. Keep both under the configured data directory.
+    store = DropItStore(
+        str(settings.data_dir / "dropit.db"),
+        vector_store_path=str(settings.resolved_chroma_dir),
+    )
+    embedder = embedder or DashScopeTextEmbedder(settings)
+    descriptor = descriptor or DeepSeekTrackDescriptor(settings)
     registry = DropItToolRegistry(store, embedder)
-    copilot = DropItAgent(store, registry, settings)
+    intent_fallback = (
+        OllamaIntentFallback(
+            settings.ollama_base_url,
+            settings.ollama_model,
+            settings.ollama_timeout_seconds,
+        )
+        if settings.intent_fallback_enabled
+        else None
+    )
+    copilot = DropItAgent(
+        store,
+        registry,
+        settings,
+        intent=IntentRecognizer(fallback=intent_fallback),
+    )
     jobs = JobRunner(store, embedder, descriptor, analyzer)
 
     @asynccontextmanager

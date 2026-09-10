@@ -1,10 +1,11 @@
 # DropIt DJ Agent
 
-DropIt 的后端以 LangChain Agent 为对话入口，使用 librosa 分析音乐属性，并用小模型生成歌曲文本描述进行本地 RAG。
+DropIt 的后端以 LangChain Agent 为对话入口，使用 librosa 分析音乐属性，DeepSeek-V4.1-Flash 生成歌曲文本描述，
+DashScope `qwen3.7-text-embedding` 生成向量，并用 Chroma 做音乐 RAG。
 Agent 只调用三个工具：`search_library`、`find_similar_tracks`、`generate_dj_set`。
 
-音乐 RAG 保存歌曲描述的文本向量；查询文本通过同一个 MiniLM 文本模型临时编码。曲目信息、描述、向量、
-会话、后台任务和 Set 均保存在 SQLite，不需要普通文本向量库、Chroma 或外部音乐 API。
+音乐 RAG 保存歌曲描述的文本向量；查询文本通过同一个 DashScope embedding API 编码。
+曲目信息、描述、会话、后台任务和 Set 保存在 SQLite，向量保存在 `DROPIT_CHROMA_DIR` 指向的 Chroma 目录。
 
 文档入口：[docs](docs/README.md)。
 
@@ -19,11 +20,11 @@ docker compose -f compose.backend.yaml run --rm api python -m backend.music.down
 docker compose -f compose.backend.yaml up
 ```
 
-启动后访问 `http://127.0.0.1:8765/api/docs`。配置服务器的 `DEEPSEEK_API_KEY` 后可使用 Agent 对话；
-缺少聊天密钥不影响曲库管理和本地音乐分析。
+启动后访问 `http://127.0.0.1:8765/api/docs`。配置 `DEEPSEEK_API_KEY` 后可使用 Agent 对话，
+配置 `DASHSCOPE_API_KEY` 后才能建立/查询歌曲描述向量；缺少任一密钥时，曲库管理和 librosa 数值分析仍可用。
 
-`backend/agent/tools.py` 直接实现三个工具；`services/` 已删除。`intend.py` 负责意图提示，
-`memory.py` 提供有界、带 TTL 的短期对话记忆。
+`backend/agent/tools.py` 直接实现三个工具；`services/` 已删除。`intent.py` 负责规则优先、
+Ollama 兜底的意图识别与 `overstep` 拒答路由；`memory.py` 提供带 TTL 的短期记忆和 80% 阈值上下文压缩。
 
 ```bash
 python -m pip install -r requirements.txt

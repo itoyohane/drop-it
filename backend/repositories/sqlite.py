@@ -9,6 +9,7 @@ from uuid import uuid4
 import numpy as np
 
 from backend.models import ChatMessage, Conversation, Job, LibrarySource, Playlist, Project, ToolEvent, Track, TrackUpdate
+from backend.repositories.chroma import ChromaEmbeddingsRepository
 
 
 GLOBAL_PROJECT_ID = "global-chat"
@@ -21,7 +22,7 @@ def _now() -> str:
 class SqliteRepository:
     """Concrete repository implementation shared by API requests and workers."""
 
-    def __init__(self, db_path: str = "data/dropit.db") -> None:
+    def __init__(self, db_path: str = "data/dropit.db", vector_store_path: str | Path | None = None) -> None:
         path = Path(db_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(path, timeout=30, check_same_thread=False)
@@ -31,6 +32,8 @@ class SqliteRepository:
         self.connection.execute("PRAGMA synchronous = NORMAL")
         self.connection.execute("PRAGMA busy_timeout = 30000")
         self.lock = threading.RLock()
+        chroma_path = vector_store_path or (":memory:" if db_path == ":memory:" else path.parent / "chroma")
+        self.vector_store = ChromaEmbeddingsRepository(chroma_path)
         self._migrate()
 
     def close(self) -> None:
@@ -376,20 +379,17 @@ class SqliteRepository:
         return self._track(row) if row else None
 
     def save_embedding(self, track_id: str, model: str, vector: np.ndarray) -> None:
-        values = np.asarray(vector, dtype="<f4")
+        values = np.asarray(vector, dtype=np.float32)
         if values.ndim != 1 or not values.size or not np.isfinite(values).all():
             raise ValueError("无效的音乐向量")
         norm = float(np.linalg.norm(values))
         if norm < 1e-8:
             raise ValueError("音乐向量不能为零")
-        values = values / norm
+        # Vectors are intentionally not serialized into SQLite anymore. The
+        # relational DB stores only readiness/model metadata; Chroma owns the
+        # vector payload and persists it under the configured data directory.
+        self.vector_store.save_embedding(track_id, model, values)
         with self.lock, self.connection:
-            self.connection.execute(
-                """INSERT INTO music_embeddings (track_id, model, dimensions, vector, updated_at)
-                   VALUES (?, ?, ?, ?, ?) ON CONFLICT(track_id, model) DO UPDATE SET
-                   dimensions=excluded.dimensions, vector=excluded.vector, updated_at=excluded.updated_at""",
-                (track_id, model, values.size, values.tobytes(), _now()),
-            )
             self.connection.execute(
                 """UPDATE tracks SET embedding_status='ready', embedding_model=?,
                    embedding_error=NULL, updated_at=? WHERE id=?""", (model, _now(), track_id),
@@ -403,18 +403,18 @@ class SqliteRepository:
             )
 
     def music_vectors(self, project_id: str, model: str) -> dict[str, np.ndarray]:
-        """Membership is checked in SQL before any vectors enter the retriever."""
+        """Read authorized vectors from Chroma after checking membership in SQL."""
         join = "" if project_id == GLOBAL_PROJECT_ID else "JOIN project_tracks pt ON pt.track_id=t.id"
         scope = "" if project_id == GLOBAL_PROJECT_ID else "AND pt.project_id=?"
         params = (model,) if project_id == GLOBAL_PROJECT_ID else (model, project_id)
         with self.lock:
             rows = self.connection.execute(
-                f"""SELECT e.track_id, e.vector FROM music_embeddings e
-                    JOIN tracks t ON t.id=e.track_id {join}
-                    WHERE e.model=? AND t.analysis_status='analyzed'
-                    AND t.embedding_status='ready' AND t.embedding_model=e.model {scope}""", params,
+                f"""SELECT t.id FROM tracks t {join}
+                    WHERE t.analysis_status='analyzed'
+                    AND t.embedding_status='ready' AND t.embedding_model=? {scope}""", params,
             ).fetchall()
-        return {row["track_id"]: np.frombuffer(row["vector"], dtype="<f4").copy() for row in rows}
+        track_ids = [str(row["id"]) for row in rows]
+        return self.vector_store.vectors(track_ids, model)
 
     def all_tracks(self, project_id: str | None = None) -> list[Track]:
         with self.lock:

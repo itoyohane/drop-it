@@ -3,7 +3,7 @@
 后端入口是 `backend.main:create_app`。开发环境的 OpenAPI 页面位于 `/api/docs`，生产模式关闭。
 除非另行说明，请求和响应均为 JSON；错误使用 FastAPI 的 `{ "detail": "..." }` 格式。
 
-代码入口分别位于 `backend/agent/tools.py`、`backend/agent/intend.py`、
+代码入口分别位于 `backend/agent/tools.py`、`backend/agent/intent.py`、
 `backend/agent/memory.py`、`backend/repositories/` 和 `backend/workers/analyze_track.py`。
 
 ## Agent 工具
@@ -62,7 +62,7 @@
 
 | 方法与路径 | 请求 | 结果 |
 | --- | --- | --- |
-| `GET /api/health` | 无 | 版本、三个工具、模型状态、`librosa-text-rag` provider |
+| `GET /api/health` | 无 | 版本、三个工具、模型状态、`librosa-deepseek-dashscope-chroma-rag` provider |
 | `GET/POST /api/projects` | `ProjectCreate` 用于 POST | 列表或创建项目，POST 为 201 |
 | `GET/PATCH/DELETE /api/projects/{id}` | `ProjectUpdate` 用于 PATCH | 项目读取、更新或删除 |
 | `GET /api/library` | 无 | 单用户全局曲库 |
@@ -119,7 +119,7 @@ SSE 每帧为 `data: <JSON>\n\n`：
 - `Job.status`：`queued/running/completed/failed/cancelled`；kind 保留 `analyze/reindex` 枚举。
 - `Playlist.status`：`draft/approved`；时长是整曲秒数之和。
 
-向量存在 SQLite `music_embeddings`，键是 `track_id + model`，内容是归一化 little-endian float32。
+向量存在 Chroma，按 model key 分集合；SQLite 仅保存向量状态和模型 key。项目成员关系仍由 SQLite 校验后再读取 Chroma。
 本地音频路径只用于服务端处理，不进入 Tool 给模型的上下文。
 
 ## 环境变量
@@ -127,17 +127,33 @@ SSE 每帧为 `data: <JSON>\n\n`：
 | 名称 | 默认值 | 用途 |
 | --- | --- | --- |
 | `DROPIT_ENV` | `development` | `development/test/production` |
-| `DROPIT_DATA_DIR` | `data` | SQLite、导入音频与模型缓存根目录 |
-| `DEEPSEEK_API_KEY` | 空 | 仅服务端聊天凭证 |
+| `DROPIT_DATA_DIR` | `data` | SQLite、导入音频与默认 Chroma 目录根目录 |
+| `DEEPSEEK_API_KEY` | 空 | 服务端聊天凭证，也可作为歌曲描述 API key 的回退 |
 | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | OpenAI 兼容端点 |
 | `DROPIT_MODEL` | `deepseek-v4-pro` | 聊天模型名 |
-| `DROPIT_DESCRIPTION_MODEL` | `google/flan-t5-small` | 歌曲描述小模型 |
-| `DROPIT_DESCRIPTION_MODEL_REVISION` | `main` | 描述模型 revision |
-| `DROPIT_TEXT_EMBEDDING_MODEL` | `sentence-transformers/all-MiniLM-L6-v2` | 文本向量模型 |
-| `DROPIT_TEXT_EMBEDDING_MODEL_REVISION` | `main` | 向量模型 revision |
-| `DROPIT_TEXT_EMBEDDING_DIMENSIONS` | `384` | 向量维度 |
-| `DROPIT_MUSIC_MODEL_DEVICE` | `cpu` | 本地模型推理设备 |
-| `DROPIT_MUSIC_MODELS_LOCAL_FILES_ONLY` | `true` | API 运行时只读本地模型缓存 |
+| `DEEPSEEK_DESCRIPTION_API_KEY` | 空 | 歌曲描述专用 DeepSeek key；为空时回退到 `DEEPSEEK_API_KEY` |
+| `DEEPSEEK_DESCRIPTION_BASE_URL` | `https://api.deepseek.com` | 歌曲描述 Chat Completions 端点根地址 |
+| `DEEPSEEK_DESCRIPTION_TIMEOUT_SECONDS` | `60` | 歌曲描述请求超时 |
+| `DROPIT_DESCRIPTION_MODEL` | `deepseek-v4.1-flash` | 歌曲描述模型名 |
+| `DASHSCOPE_API_KEY` | 空 | DashScope embedding 凭证 |
+| `DASHSCOPE_BASE_URL` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | DashScope OpenAI 兼容端点根地址 |
+| `DASHSCOPE_TIMEOUT_SECONDS` | `60` | embedding 请求超时 |
+| `DROPIT_TEXT_EMBEDDING_MODEL` | `qwen3.7-text-embedding` | 歌曲描述和查询向量模型 |
+| `DROPIT_TEXT_EMBEDDING_DIMENSIONS` | `1024` | DashScope 输出维度；需与向量索引一致 |
+| `DROPIT_CHROMA_DIR` | `data/chroma` | Chroma 持久化目录 |
+| `DROPIT_INTENT_FALLBACK_ENABLED` | `true` | 规则未命中时是否调用 Ollama 意图分类 |
+| `OLLAMA_BASE_URL` | `http://127.0.0.1:11434/v1` | Ollama OpenAI 兼容端点 |
+| `OLLAMA_MODEL` | `hf.co/openbmb/MiniCPM5-2B-GGUF:Q4_K_M` | 意图分类模型 |
+| `OLLAMA_TIMEOUT_SECONDS` | `8` | 意图分类请求超时 |
+| `DROPIT_AGENT_MEMORY_MAX_MESSAGES` | `100` | 压缩前的内存消息数安全上限 |
+| `DROPIT_AGENT_MEMORY_TTL_SECONDS` | `1800` | 活跃会话内存 TTL |
+| `DROPIT_AGENT_CONTEXT_WINDOW_TOKENS` | `32768` | 当前聊天模型的上下文窗口配置 |
+| `DROPIT_AGENT_CONTEXT_COMPACTION_RATIO` | `0.8` | 自动压缩触发比例 |
+| `DROPIT_AGENT_CONTEXT_KEEP_MESSAGES` | `6` | 压缩时原样保留的最近消息数 |
+| `DROPIT_AGENT_CONTEXT_RESERVED_TOKENS` | `4096` | 为工具结果和回答预留的 token |
+| `DROPIT_AGENT_CONTEXT_SUMMARY_TOKENS` | `512` | 历史摘要目标长度 |
+| `DROPIT_DESCRIPTION_MODEL_REVISION` | `api` | 描述模型 key 版本标签 |
+| `DROPIT_TEXT_EMBEDDING_MODEL_REVISION` | `api` | 向量模型 key 版本标签 |
 | `DROPIT_CORS_ORIGINS` | 两个本地 5173 地址 | 逗号分隔允许源 |
 | `DROPIT_MAX_UPLOAD_MB` | `1024` | 单文件限制，允许 10–4096 |
 | `DROPIT_MAX_UPLOAD_FILES` | `500` | 单批限制，允许 1–5000 |

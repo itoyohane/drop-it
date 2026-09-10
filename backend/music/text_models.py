@@ -1,4 +1,8 @@
-"""Small local text-generation and embedding models for description-based music RAG."""
+"""Description and embedding clients used by the music RAG pipeline.
+
+The legacy local model classes remain import-compatible for old callers, but the
+production defaults are the hosted DeepSeek and DashScope clients below.
+"""
 
 from threading import RLock
 from typing import Protocol
@@ -30,6 +34,138 @@ class TextEmbedder(Protocol):
     dimensions: int
 
     def text(self, value: str) -> np.ndarray: ...
+
+
+class DeepSeekTrackDescriptor:
+    """Generate a short retrieval document from measured librosa features.
+
+    DeepSeek is only given deterministic features.  The prompt explicitly asks it
+    not to infer artist, genre, instrumentation, or other facts that librosa did
+    not measure, so the generated text remains suitable for semantic retrieval.
+    """
+
+    def __init__(self, settings: Settings):
+        self.settings = settings
+        self.model_key = (
+            f"{settings.description_model}@{settings.description_model_revision}:features-v2"
+        )
+
+    @staticmethod
+    def _facts(track: Track) -> str:
+        details = track.analysis_details
+        return (
+            f"music audio; {track.bpm:.1f} BPM; key {track.key}; Camelot {track.camelot_key}; "
+            f"energy {track.energy:.2f}; spectral centroid "
+            f"{float(details.get('spectral_centroid_hz', 0)):.0f} Hz; onset strength "
+            f"{float(details.get('onset_strength', 0)):.2f}"
+        )
+
+    @staticmethod
+    def _endpoint(base_url: str) -> str:
+        endpoint = base_url.rstrip("/")
+        return endpoint if endpoint.endswith("/chat/completions") else f"{endpoint}/chat/completions"
+
+    def describe(self, track: Track) -> str:
+        import httpx
+
+        api_key = self.settings.music_description_api_key
+        if not api_key or not api_key.get_secret_value().strip():
+            raise RuntimeError(
+                "DeepSeek 歌曲描述 API key 未配置，请设置 DEEPSEEK_DESCRIPTION_API_KEY "
+                "或 DEEPSEEK_API_KEY。"
+            )
+        facts = self._facts(track)
+        response = httpx.post(
+            self._endpoint(self.settings.description_base_url),
+            headers={
+                "Authorization": f"Bearer {api_key.get_secret_value().strip()}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": self.settings.description_model,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You write concise music retrieval descriptions. Use only the measured "
+                            "features supplied by the user. Never invent genre, vocals, instruments, "
+                            "artist, era, or mood. Return one short English phrase."
+                        ),
+                    },
+                    {"role": "user", "content": f"Measured features: {facts}"},
+                ],
+                "temperature": 0.1,
+                "max_tokens": 96,
+                "stream": False,
+            },
+            timeout=self.settings.description_timeout_seconds,
+        )
+        if response.is_error:
+            raise RuntimeError(f"DeepSeek 歌曲描述请求失败（HTTP {response.status_code}）")
+        try:
+            payload = response.json()
+            generated = payload["choices"][0]["message"]["content"]
+            if isinstance(generated, list):
+                generated = " ".join(
+                    item.get("text", "") for item in generated if isinstance(item, dict)
+                )
+            generated = str(generated or "").strip()
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            raise RuntimeError("DeepSeek 歌曲描述响应格式无效") from exc
+        return f"{facts}. {generated}" if generated else facts
+
+
+class DashScopeTextEmbedder:
+    """Call DashScope's OpenAI-compatible text embedding endpoint."""
+
+    def __init__(self, settings: Settings):
+        self.settings = settings
+        self.dimensions = settings.text_embedding_dimensions
+        self.model_key = (
+            f"{settings.text_embedding_model}@{settings.text_embedding_model_revision}:dashscope-v1"
+        )
+
+    @staticmethod
+    def _endpoint(base_url: str) -> str:
+        endpoint = base_url.rstrip("/")
+        return endpoint if endpoint.endswith("/embeddings") else f"{endpoint}/embeddings"
+
+    def text(self, value: str) -> np.ndarray:
+        import httpx
+
+        if not value.strip():
+            raise ValueError("音乐描述不能为空")
+        api_key = self.settings.dashscope_api_key
+        if not api_key or not api_key.get_secret_value().strip():
+            raise RuntimeError("DashScope API key 未配置，请设置 DASHSCOPE_API_KEY。")
+        response = httpx.post(
+            self._endpoint(self.settings.dashscope_base_url),
+            headers={
+                "Authorization": f"Bearer {api_key.get_secret_value().strip()}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": self.settings.text_embedding_model,
+                "input": value,
+                "dimensions": self.dimensions,
+                "encoding_format": "float",
+            },
+            timeout=self.settings.dashscope_timeout_seconds,
+        )
+        if response.is_error:
+            raise RuntimeError(f"DashScope 向量请求失败（HTTP {response.status_code}）")
+        try:
+            payload = response.json()
+            rows = payload["data"]
+            row = next(item for item in rows if int(item.get("index", 0)) == 0)
+            vector = unit_vector(row["embedding"])
+        except (KeyError, IndexError, StopIteration, TypeError, ValueError) as exc:
+            raise RuntimeError("DashScope 向量响应格式无效") from exc
+        if vector.shape != (self.dimensions,):
+            raise ValueError(
+                f"DashScope 向量维度为 {vector.size}，配置期望 {self.dimensions}。"
+            )
+        return vector
 
 
 class SmallTextDescriptor:

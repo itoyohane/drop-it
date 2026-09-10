@@ -10,7 +10,9 @@ import pytest
 from backend.config import Settings
 from backend.models import Track
 from backend.music.librosa_analyzer import LibrosaAnalyzer, _key_from_chroma
-from backend.music.text_models import SentenceTransformerEmbedder, SmallTextDescriptor
+from backend.music.text_models import (
+    DashScopeTextEmbedder, DeepSeekTrackDescriptor, SentenceTransformerEmbedder, SmallTextDescriptor,
+)
 
 
 def test_key_detection_maps_pitch_to_camelot(monkeypatch):
@@ -91,6 +93,60 @@ def test_sentence_transformer_adapter_normalizes_and_checks_dimension(monkeypatc
     )
     result = embedder.text("dark electronic music")
     assert np.allclose(result, [.6, .8, 0])
+
+
+def test_deepseek_descriptor_uses_measured_features(monkeypatch):
+    import httpx
+
+    calls = []
+
+    class Response:
+        status_code = 200
+        is_error = False
+
+        def json(self):
+            return {"choices": [{"message": {"content": "steady tonal texture"}}]}
+
+    def post(url, **kwargs):
+        calls.append((url, kwargs))
+        return Response()
+
+    monkeypatch.setattr(httpx, "post", post)
+    settings = Settings(_env_file=None, DEEPSEEK_DESCRIPTION_API_KEY="secret")
+    descriptor = DeepSeekTrackDescriptor(settings)
+    track = Track(id="a", title="A", artist="B", filename="a.wav", path="a.wav", bpm=124,
+                  key="A minor", camelot_key="8A", energy=.6,
+                  analysis_details={"spectral_centroid_hz": 1800, "onset_strength": 1.2})
+    result = descriptor.describe(track)
+    assert result.endswith("steady tonal texture")
+    assert calls[0][0].endswith("/chat/completions")
+    assert calls[0][1]["json"]["model"] == settings.description_model
+    assert "124.0 BPM" in calls[0][1]["json"]["messages"][1]["content"]
+
+
+def test_dashscope_embedder_parses_and_normalizes_openai_response(monkeypatch):
+    import httpx
+
+    class Response:
+        status_code = 200
+        is_error = False
+
+        def json(self):
+            return {"data": [{"index": 0, "embedding": [3, 4, 0]}]}
+
+    captured = {}
+
+    def post(url, **kwargs):
+        captured.update(url=url, kwargs=kwargs)
+        return Response()
+
+    monkeypatch.setattr(httpx, "post", post)
+    settings = Settings(_env_file=None, DASHSCOPE_API_KEY="secret",
+                        DROPIT_TEXT_EMBEDDING_DIMENSIONS=3)
+    vector = DashScopeTextEmbedder(settings).text("dark electronic music")
+    assert np.allclose(vector, [.6, .8, 0])
+    assert captured["url"].endswith("/embeddings")
+    assert captured["kwargs"]["json"]["model"] == "qwen3.7-text-embedding"
 
 
 @pytest.mark.skipif(os.getenv("DROPIT_TEST_AUDIO_MODELS") != "1",

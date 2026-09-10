@@ -1,4 +1,8 @@
-"""Repository contract for versioned song-description embeddings."""
+"""Repository contract for versioned song-description embeddings.
+
+The concrete implementation is Chroma-backed; the contract keeps workers and
+tools independent of the vector database implementation.
+"""
 
 from typing import Protocol
 

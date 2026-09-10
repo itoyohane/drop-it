@@ -5,7 +5,7 @@
 ## 90 秒介绍
 
 > DropIt 是一个本地曲库分析、检索和 DJ Set 编排助手。歌曲导入后，后台用 librosa 提取 BPM、
-> 调性、Camelot、能量和频谱特征，用 FLAN-T5-small 生成可观察的歌曲描述，再用 MiniLM 编成 384 维向量，并将属性、描述、向量和任务状态
+> 调性、Camelot、能量和频谱特征，用 DeepSeek-V4.1-Flash 生成可观察的歌曲描述，再用 DashScope `qwen3.7-text-embedding` 编成向量，并将属性、描述、向量和任务状态
 > 持久化在 SQLite。对话层只有一个 LangChain Agent，它按需调用三个项目范围工具：查曲库、找相似、
 > 排 Set。用户查询与歌曲描述用同一文本向量空间检索；标题、艺人、BPM 等走精确过滤；最终排 Set
 > 由确定性规划器完成并保存。前端通过稳定 SSE 事件看到 token、工具状态和结果。系统没有普通文本
@@ -21,7 +21,7 @@
 6. 最后主动说明单用户、线性检索、单 worker、启发式规划和旧前端联调状态。
 
 展示代码时按 `agent/tools → repositories/music → worker` 讲：Agent 选择能力，tool 函数直接执行三项业务，
-repository 限制数据访问，music 适配模型，worker 承担长任务。`intend.py` 和 `memory.py` 分别提供意图提示与短期上下文。
+repository 限制数据访问，music 适配模型，worker 承担长任务。`intent.py` 和 `memory.py` 分别提供五路意图识别、超纲拒答与可压缩短期上下文。
 
 ## 高频问题
 
@@ -30,10 +30,10 @@ repository 限制数据访问，music 适配模型，worker 承担长任务。`i
 对话统一交给 `create_agent`。模型结合历史和工具描述决定是否查询、先解析参考歌曲还是生成 Set，
 工具结果再进入下一轮推理。后台分析不是 Agent 工具，因为上传后确定执行，不需要语言模型决策。
 
-### 为什么改用 librosa + 文本小模型？
+### 为什么改用 librosa + 文本描述 API？
 
-librosa 跨平台、依赖轻，提供 DJ 规则需要的 BPM、调性、节拍、响度与频谱特征。小模型把这些测量值
-整理成可检查的文本，再用 MiniLM 检索，部署成本低于 CLAP。代价是只能表达已测量特征，不能假装识别了真实流派、歌词或乐器。
+librosa 跨平台、依赖轻，提供 DJ 规则需要的 BPM、调性、节拍、响度与频谱特征。DeepSeek 把这些测量值
+整理成可检查的文本，再用 DashScope 检索，描述与查询可以保持同一多语言向量空间。代价是只能表达已测量特征，不能假装识别了真实流派、歌词或乐器。
 
 ### 这算 RAG 吗？
 
@@ -74,5 +74,5 @@ librosa、歌曲描述模型与文本 embedding 模型都在本地运行，不�
 - 将 Set 规划升级为束搜索、动态规划或约束求解，并把混音重叠纳入时长模型。
 - 在接入用户前完成认证、曲库隔离、隐私披露和模型权重许可证核查。
 
-不要说“Cyanite 外部搜索”“Chroma 文档 RAG”“三个 Subagent 协商”或“小模型自动识别完整流派标签”，
-这些都不是当前实现。具体参数见[接口参考](reference-api-tools-and-data.md)，运行边界见[教程](tutorial-run-and-observe.md)。
+不要说“Cyanite 外部搜索”“三个 Subagent 协商”或“模型自动识别完整流派标签”，
+这些都不是当前实现。当前确实使用 Chroma 保存音乐向量。具体参数见[接口参考](reference-api-tools-and-data.md)，运行边界见[教程](tutorial-run-and-observe.md)。

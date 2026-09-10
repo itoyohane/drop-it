@@ -1,17 +1,15 @@
-"""Explicit model download; starting the API never downloads model weights."""
+"""Validate hosted music-RAG configuration.
 
-from huggingface_hub import snapshot_download
+The default description and embedding models are API-backed, so there are no
+Hugging Face weights to download at startup or via this command.
+"""
 
 from backend.config import Settings
 
 
 if __name__ == "__main__":
     settings = Settings()
-    for model, revision in (
-        (settings.description_model, settings.description_model_revision),
-        (settings.text_embedding_model, settings.text_embedding_model_revision),
-    ):
-        snapshot_download(
-            model, revision=revision, cache_dir=str(settings.data_dir / "models"),
-            allow_patterns=["*.json", "*.txt", "*.model", "*.bin", "*.safetensors"],
-        )
+    print(f"DeepSeek description model: {settings.description_model}")
+    print(f"DashScope embedding model: {settings.text_embedding_model}")
+    print(f"Chroma directory: {settings.resolved_chroma_dir}")
+    print("Hosted model weights are not downloaded locally; configure API keys in .env.")

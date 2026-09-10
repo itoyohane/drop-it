@@ -12,6 +12,8 @@ from langchain_core.messages import AIMessage
 from pydantic import ValidationError
 
 from backend.agent.agent import DropItAgent, MODEL_NOT_CONFIGURED_ERROR
+from backend.agent.intent import IntentRecognizer, OVERSTEP_RESPONSE
+from backend.agent.memory import ShortTermMemory
 from backend.config import Settings
 from backend.workers.analyze_track import JobRunner
 from backend.main import create_app
@@ -244,6 +246,8 @@ def test_vectors_persist_across_restart(tmp_path):
     try:
         vector = reopened.music_vectors(project.id, "test-text@1")["saved"]
         assert np.allclose(vector, [.6, .8, 0])
+        assert reopened.connection.execute("SELECT COUNT(*) FROM music_embeddings").fetchone()[0] == 0
+        assert reopened.vector_store.path.endswith("chroma")
     finally:
         reopened.close()
 
@@ -356,6 +360,78 @@ def test_agent_executes_real_langchain_tool_graph(library):
     assert events[-1]["message"]["content"] == "曲库中找到 Signal。"
     assert [e["name"] for e in events[-1]["message"]["tool_events"]] == registry.names
     assert events[-1]["playlist"]["tracks"][0]["track"]["id"] == "Similar"
+
+
+def test_agent_refuses_overstep_without_calling_chat_model_or_tools():
+    store = DropItStore(":memory:")
+    try:
+        project = store.create_project("Overstep")
+        registry = DropItToolRegistry(store, FakeEmbedder())
+        settings = Settings(_env_file=None, DEEPSEEK_API_KEY="test-only")
+        agent = DropItAgent(store, registry, settings, intent=IntentRecognizer())
+        agent._chat_model = lambda: (_ for _ in ()).throw(AssertionError("model must not run"))
+        conversation = store.ensure_default_conversation(project.id)
+
+        async def collect():
+            return [event async for event in agent.stream_chat(
+                project.id, conversation.id, "帮我写一段 Python 股票分析代码"
+            )]
+
+        events = asyncio.run(collect())
+        assert events[-1]["type"] == "complete"
+        assert events[-1]["message"]["content"] == OVERSTEP_RESPONSE
+        assert events[-1]["message"]["tool_events"] == []
+        assert events[-1]["playlist"] is None
+    finally:
+        store.close()
+
+
+def test_agent_compacts_context_at_configured_threshold():
+    store = DropItStore(":memory:")
+    try:
+        project = store.create_project("Compaction")
+        registry = DropItToolRegistry(store, FakeEmbedder())
+        settings = Settings(
+            _env_file=None,
+            DEEPSEEK_API_KEY="test-only",
+            DROPIT_AGENT_CONTEXT_WINDOW_TOKENS=4096,
+            DROPIT_AGENT_CONTEXT_COMPACTION_RATIO=.5,
+            DROPIT_AGENT_CONTEXT_KEEP_MESSAGES=2,
+            DROPIT_AGENT_CONTEXT_RESERVED_TOKENS=0,
+        )
+        memory = ShortTermMemory(max_messages=100)
+        agent = DropItAgent(store, registry, settings, memory=memory,
+                            intent=IntentRecognizer())
+
+        class Model(FakeMessagesListChatModel):
+            def bind_tools(self, tools, **kwargs):
+                return self
+
+        model = Model(responses=[AIMessage(content="已确认的历史事实"),
+                                 AIMessage(content="继续处理。")])
+        agent._chat_model = lambda: model
+        conversation = store.ensure_default_conversation(project.id)
+        memory_key = f"{project.id}:{conversation.id}"
+        memory.seed(memory_key, [
+            {"role": "user", "content": "a" * 3000},
+            {"role": "assistant", "content": "b" * 3000},
+            {"role": "user", "content": "最近问题"},
+            {"role": "assistant", "content": "最近回答"},
+        ])
+
+        async def collect():
+            return [event async for event in agent.stream_chat(
+                project.id, conversation.id, "继续"
+            )]
+
+        events = asyncio.run(collect())
+        compacted = memory.messages(memory_key)
+        assert any(event.get("label") == "正在压缩上下文" for event in events)
+        assert compacted[0]["content"].startswith("[历史摘要")
+        assert "已确认的历史事实" in compacted[0]["content"]
+        assert events[-1]["message"]["content"] == "继续处理。"
+    finally:
+        store.close()
 
 
 def test_invalid_tool_result_is_not_reported_success():

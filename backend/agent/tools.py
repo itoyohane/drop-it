@@ -23,7 +23,7 @@ class DropItToolRegistry:
     """Bind the Agent's tool functions to a server-selected project and local store."""
 
     names = ["search_library", "find_similar_tracks", "generate_dj_set"]
-    provider = "librosa-text-rag"
+    provider = "librosa-deepseek-dashscope-chroma-rag"
 
     def __init__(self, store: DropItStore, embedder: TextEmbedder):
         self.store, self.embedder = store, embedder
@@ -93,8 +93,8 @@ class DropItToolRegistry:
         ) -> str:
             """Retrieve facts from the current music library.
 
-            Use query for semantic search over small-model song descriptions generated from
-            librosa features. For title/artist/BPM/key/energy constraints or an overview,
+            Use query for semantic search over DeepSeek descriptions generated from librosa
+            features and indexed by DashScope Qwen embeddings in Chroma. For title/artist/BPM/key/energy constraints or an overview,
             leave query empty and use filters. Only returned track_ids are valid references.
             """
             try:

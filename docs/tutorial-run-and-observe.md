@@ -1,12 +1,12 @@
 # 运行并观察一次 DropIt 工作流
 
-本教程会启动后端、下载歌曲描述与文本向量模型，并说明如何验证音频分析、曲库检索和 Agent。
+本教程会启动后端、检查歌曲描述与文本向量 API 配置，并说明如何验证音频分析、曲库检索和 Agent。
 
 ## 前提
 
 - Python 3.11+；librosa 支持 Windows、macOS 和 Linux。
 - 至少准备两首支持格式的本地歌曲，找相似至少需要一首参考歌和一首候选歌。
-- 对话需要服务端 DeepSeek 兼容 API Key；音频导入与分析不需要聊天 Key。
+- 对话/描述需要 DeepSeek 兼容 API Key，语义检索需要 DashScope API Key；librosa 数值分析本身不需要 API Key。
 
 ## 第 1 步：用 Docker 启动
 
@@ -18,11 +18,11 @@ docker compose -f compose.backend.yaml run --rm api python -m backend.music.down
 docker compose -f compose.backend.yaml up
 ```
 
-第二条命令显式下载 FLAN-T5-small 与 all-MiniLM-L6-v2 到数据卷。API 启动不会联网下载权重。
+第二条命令现在只检查 DeepSeek、DashScope 与 Chroma 配置；描述和 embedding 使用远程 API，不下载本地权重。
 第三条命令启动单个 Uvicorn worker，避免多个进程竞争同一 SQLite 任务。
 
 打开 `http://127.0.0.1:8765/api/docs`。`GET /api/health` 应返回 `status: ok`、
-`embedding_provider: librosa-text-rag` 和三个工具名。生产模式会关闭 OpenAPI 页面。
+`embedding_provider: librosa-deepseek-dashscope-chroma-rag` 和三个工具名。生产模式会关闭 OpenAPI 页面。
 
 ## 第 2 步：配置聊天模型
 
@@ -30,12 +30,17 @@ docker compose -f compose.backend.yaml up
 
 ```dotenv
 DEEPSEEK_API_KEY=替换为服务端密钥
+DEEPSEEK_DESCRIPTION_API_KEY=可选，歌曲描述专用密钥
+DASHSCOPE_API_KEY=替换为 DashScope 密钥
 DROPIT_MODEL=替换为账号实际可用的模型名
+DROPIT_DESCRIPTION_MODEL=deepseek-v4.1-flash
+DROPIT_TEXT_EMBEDDING_MODEL=qwen3.7-text-embedding
 DEEPSEEK_BASE_URL=https://api.deepseek.com
+DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 ```
 
 Compose 读取当前 shell 环境做变量替换，不会自动把 `.env` 复制进镜像。修改后重启服务。
-如果只测试曲库和音频管线，可留空；聊天接口会明确返回 503。
+如果只测试曲库元数据和 librosa 管线，可留空；缺少对应 API key 时，描述/embedding 阶段会在曲目状态中报告失败。
 
 ## 第 3 步：导入并等待分析
 
@@ -47,7 +52,7 @@ Compose 读取当前 shell 环境做变量替换，不会自动把 `.env` 复制
 4. 轮询返回 Job 的 `GET /api/jobs/{job_id}`，直到 `completed` 或 `failed`。
 5. `GET /api/projects/{id}/library` 检查两个独立状态：`analysis_status=analyzed` 和 `embedding_status=ready`。
 
-分析任务依次保存 librosa 结果、歌曲文本描述和描述向量。因此小模型或 embedding 失败不会抹掉 BPM、调性和能量。
+分析任务依次保存 librosa 结果、DeepSeek 歌曲文本描述和 DashScope 描述向量。因此 API 或 embedding 失败不会抹掉 BPM、调性和能量。
 进程中断后的 queued/running 任务会在下次启动时恢复。显式把 `track_ids` 传给 analyze 接口会强制重跑；
 空数组只补齐尚未就绪的阶段。
 
@@ -88,12 +93,10 @@ python -m pytest backend/tests -q
 ```bash
 python -m pip install -r requirements-audio.txt
 python -m backend.music.download_models
-DROPIT_TEST_AUDIO_MODELS=1 DROPIT_TEST_MODEL_DATA_DIR=data python -m pytest backend/tests/test_audio_models.py -q
 ```
 
-PowerShell 设置环境变量的写法为 `$env:DROPIT_TEST_AUDIO_MODELS='1'` 与
-`$env:DROPIT_TEST_MODEL_DATA_DIR='data'`。测试使用合成点击/和弦音频，只证明推理链路可用，
-不代表真实曲库 BPM/调性准确率或检索排序质量。
+该命令不会下载权重；真实导入 smoke test 需要配置 DeepSeek 与 DashScope key，使用合成点击/和弦音频，
+只证明 API 链路可用，不代表真实曲库 BPM/调性准确率或检索排序质量。
 
 ## 常见故障
 
@@ -103,8 +106,8 @@ PowerShell 设置环境变量的写法为 `$env:DROPIT_TEST_AUDIO_MODELS='1'` �
 
 ### 提示没有当前歌曲描述索引
 
-确认模型下载到与 `DROPIT_DATA_DIR` 相同的持久化目录，并查看曲目的 `embedding_error`。
-模型或 revision 改变会产生新 model key；旧向量不会复用，需要重新分析。
+确认 DeepSeek 与 DashScope key、base URL 和模型名正确，并查看曲目的 `embedding_error`。
+模型、revision 或 embedding 维度改变会产生新 model key；旧向量不会复用，需要重新分析。
 
 ### 搜索能用，风格检索不能用
 
