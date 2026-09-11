@@ -10,8 +10,8 @@
 
 ## 怎么解决
 
-在 Agent 工具路由层增加硬隔离：`music_chat`（包括无效分类的降级结果）使用主模型但传入空工具列表；只有搜索、相似歌曲和 DJ Set 意图才暴露业务工具。
+在 `intent.py` 的路由结果中明确工具权限：`music_chat`（包括无效分类的降级结果）使用主模型但传入空工具列表；只有搜索、相似歌曲和 DJ Set 意图才暴露业务工具。
 
 ## 验证与复盘
 
-新增回归测试覆盖 Ollama 无效分类输入 `111`，确认主模型仍能回答且 `tool_events=[]`；相关测试共 33 项通过。关键实现见 `backend/agent/agent.py`，测试见 `backend/tests/test_services.py`。
+新增回归测试覆盖 Ollama 无效分类输入 `111`，确认主模型仍能回答且 `tool_events=[]`；相关测试共 38 项通过。关键实现见 `backend/agent/intent.py` 与 `backend/agent/agent.py`，测试见 `backend/tests/test_services.py`。

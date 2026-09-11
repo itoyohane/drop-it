@@ -99,15 +99,9 @@ class DropItAgent:
                 messages = await self._compact_context(memory_key, messages, active_prompt)
                 yield {"type": "status", "label": "正在思考",
                        "intent": recognized.name.value}
-            # General music chat, including invalid/unknown Ollama classifications that
-            # fall back to MUSIC_CHAT, must go straight to the model without business tools.
-            # Intent hints remain useful for tool-backed routes, but are not a permission
-            # boundary by themselves.
-            tools = (
-                []
-                if recognized.name == Intent.MUSIC_CHAT
-                else self.registry.tools_for(project_id)
-            )
+            # Intent routing owns the tool permission decision. Invalid/unknown Ollama
+            # classifications fall back to MUSIC_CHAT, whose result disallows tools.
+            tools = self.registry.tools_for(project_id) if recognized.allows_tools else []
             agent = create_agent(model=self._chat_model(), tools=tools,
                                  system_prompt=active_prompt)
             async for event in agent.astream_events(

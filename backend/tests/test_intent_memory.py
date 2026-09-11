@@ -35,6 +35,7 @@ def test_ollama_result_accepts_overstep_and_rejects_unknown_routes():
     assert result.name == Intent.OVERSTEP and result.confidence == .91
     invalid = OllamaIntentFallback._parse('{"intent":"invented","confidence":1}')
     assert invalid.name == Intent.MUSIC_CHAT and invalid.confidence == 0
+    assert not invalid.allows_tools and not result.allows_tools
 
 
 def test_short_term_memory_is_bounded_isolated_and_expires():

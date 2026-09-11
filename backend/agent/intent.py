@@ -21,11 +21,23 @@ class Intent(StrEnum):
     OVERSTEP = "overstep"
 
 
+_TOOL_INTENTS = frozenset({
+    Intent.SEARCH_LIBRARY,
+    Intent.FIND_SIMILAR,
+    Intent.GENERATE_SET,
+})
+
+
 @dataclass(frozen=True)
 class IntentResult:
     name: Intent
     confidence: float
     guidance: str
+
+    @property
+    def allows_tools(self) -> bool:
+        """Whether this routed intent may expose business tools to the main model."""
+        return self.name in _TOOL_INTENTS
 
 
 class IntentFallback(Protocol):
