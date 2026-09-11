@@ -11,7 +11,12 @@ from langchain_core.language_models.fake_chat_models import FakeMessagesListChat
 from langchain_core.messages import AIMessage
 from pydantic import ValidationError
 
-from backend.agent.agent import DropItAgent, MODEL_NOT_CONFIGURED_ERROR
+from backend.agent.agent import (
+    DropItAgent,
+    MODEL_NOT_CONFIGURED_ERROR,
+    MUSIC_CHAT_CLARIFICATION,
+    MUSIC_CHAT_SYSTEM_PROMPT,
+)
 from backend.agent.intent import IntentRecognizer, OllamaIntentFallback, OVERSTEP_RESPONSE
 from backend.agent.memory import ShortTermMemory
 from backend.config import Settings
@@ -439,8 +444,15 @@ def test_agent_routes_invalid_intent_to_tool_free_music_chat():
         assert events[-1]["type"] == "complete"
         assert events[-1]["message"]["content"] == "可以，我在。"
         assert events[-1]["message"]["tool_events"] == []
+        assert "search_library" not in MUSIC_CHAT_SYSTEM_PROMPT
     finally:
         store.close()
+
+
+def test_music_chat_replaces_textual_tool_protocol_markup():
+    raw = '<||DSML|| calls><||DSML|| invoke name="search_library"></||DSML|| invoke>'
+    assert DropItAgent._sanitize_music_chat_response(raw) == MUSIC_CHAT_CLARIFICATION
+    assert DropItAgent._sanitize_music_chat_response("解释一下 Camelot wheel") == "解释一下 Camelot wheel"
 
 
 def test_agent_compacts_context_at_configured_threshold():

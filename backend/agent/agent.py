@@ -21,6 +21,15 @@ logger = logging.getLogger(__name__)
 
 
 MODEL_NOT_CONFIGURED_ERROR = "系统模型未配置，请联系管理员在服务器 .env 中配置 DEEPSEEK_API_KEY 后重试。"
+MUSIC_CHAT_SYSTEM_PROMPT = """You are DropIt, a music and DJ knowledge assistant.
+Use concise Chinese unless the user asks otherwise.
+This route has no library, retrieval, playlist, or other business tools.
+Answer general music questions from your own knowledge without claiming retrieval.
+If the input is unclear or has no identifiable request, ask one brief clarifying question.
+Never emit tool-call syntax, function calls, XML, DSML, or internal protocol markers.
+Politely redirect unrelated topics to music. Do not use emoji.
+"""
+MUSIC_CHAT_CLARIFICATION = "我还没理解你的具体需求，请补充一句想聊什么或想让我做什么。"
 
 
 class ModelNotConfiguredError(RuntimeError):
@@ -92,42 +101,50 @@ class DropItAgent:
                 f"\nCurrent intent hint: {recognized.name.value} "
                 f"(confidence {recognized.confidence:.2f}). {recognized.guidance}"
             )
-            active_prompt = SYSTEM_PROMPT + intent_prompt
+            base_prompt = SYSTEM_PROMPT if recognized.allows_tools else MUSIC_CHAT_SYSTEM_PROMPT
+            active_prompt = base_prompt + intent_prompt
             if self.context_compressor.should_compact(messages, active_prompt):
                 yield {"type": "status", "label": "正在压缩上下文",
                        "intent": recognized.name.value}
                 messages = await self._compact_context(memory_key, messages, active_prompt)
                 yield {"type": "status", "label": "正在思考",
                        "intent": recognized.name.value}
-            # Intent routing owns the tool permission decision. Invalid/unknown Ollama
-            # classifications fall back to MUSIC_CHAT, whose result disallows tools.
-            tools = self.registry.tools_for(project_id) if recognized.allows_tools else []
-            agent = create_agent(model=self._chat_model(), tools=tools,
-                                 system_prompt=active_prompt)
-            async for event in agent.astream_events(
-                {"messages": messages}, config={"recursion_limit": 16}, version="v2"
-            ):
-                kind, name = event.get("event"), str(event.get("name") or "")
-                if kind == "on_chat_model_stream":
-                    chunk = self._message_text(event.get("data", {}).get("chunk", ""))
-                    if chunk:
-                        parts.append(chunk)
-                        yield {"type": "token", "content": chunk}
-                elif kind == "on_chat_model_end":
-                    final_text = self._message_text(event.get("data", {}).get("output", ""))
-                elif kind == "on_tool_start" and name in self.registry.names:
-                    yield {"type": "tool", "name": name, "status": "running", "summary": "正在执行"}
-                elif kind == "on_tool_end" and name in self.registry.names:
-                    output = event.get("data", {}).get("output", "")
-                    result = self._parse_tool_result(output)
-                    record = ToolEvent(name=name, status="done" if result.ok else "failed",
-                                       summary=result.summary)
-                    tool_events.append(record)
-                    yield {"type": "tool", **record.model_dump()}
-                    if result.ok and result.data.get("playlist_id"):
-                        candidate = self.store.get_playlist(str(result.data["playlist_id"]))
-                        if candidate and candidate.project_id == project_id:
-                            playlist = candidate
+            if not recognized.allows_tools:
+                response = await self._chat_model().ainvoke([
+                    {"role": "system", "content": active_prompt},
+                    *messages,
+                ])
+                final_text = self._sanitize_music_chat_response(self._message_text(response))
+            else:
+                agent = create_agent(
+                    model=self._chat_model(),
+                    tools=self.registry.tools_for(project_id),
+                    system_prompt=active_prompt,
+                )
+                async for event in agent.astream_events(
+                    {"messages": messages}, config={"recursion_limit": 16}, version="v2"
+                ):
+                    kind, name = event.get("event"), str(event.get("name") or "")
+                    if kind == "on_chat_model_stream":
+                        chunk = self._message_text(event.get("data", {}).get("chunk", ""))
+                        if chunk:
+                            parts.append(chunk)
+                            yield {"type": "token", "content": chunk}
+                    elif kind == "on_chat_model_end":
+                        final_text = self._message_text(event.get("data", {}).get("output", ""))
+                    elif kind == "on_tool_start" and name in self.registry.names:
+                        yield {"type": "tool", "name": name, "status": "running", "summary": "正在执行"}
+                    elif kind == "on_tool_end" and name in self.registry.names:
+                        output = event.get("data", {}).get("output", "")
+                        result = self._parse_tool_result(output)
+                        record = ToolEvent(name=name, status="done" if result.ok else "failed",
+                                           summary=result.summary)
+                        tool_events.append(record)
+                        yield {"type": "tool", **record.model_dump()}
+                        if result.ok and result.data.get("playlist_id"):
+                            candidate = self.store.get_playlist(str(result.data["playlist_id"]))
+                            if candidate and candidate.project_id == project_id:
+                                playlist = candidate
         except Exception as exc:
             logger.exception("agent_turn_failed")
             content = self._friendly_model_error(exc)
@@ -189,6 +206,16 @@ class DropItAgent:
         if isinstance(content, list):
             return "".join(block.get("text", "") for block in content if isinstance(block, dict))
         return ""
+
+    @staticmethod
+    def _sanitize_music_chat_response(content: str) -> str:
+        normalized = content.casefold()
+        protocol_markup = (
+            ("dsml" in normalized and ("invoke" in normalized or "calls" in normalized))
+            or "<tool_call" in normalized
+            or '"tool_calls"' in normalized
+        )
+        return MUSIC_CHAT_CLARIFICATION if protocol_markup else content
 
     @classmethod
     def _parse_tool_result(cls, value: Any) -> ToolResult:
