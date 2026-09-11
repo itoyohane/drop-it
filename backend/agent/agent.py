@@ -99,7 +99,16 @@ class DropItAgent:
                 messages = await self._compact_context(memory_key, messages, active_prompt)
                 yield {"type": "status", "label": "正在思考",
                        "intent": recognized.name.value}
-            agent = create_agent(model=self._chat_model(), tools=self.registry.tools_for(project_id),
+            # General music chat, including invalid/unknown Ollama classifications that
+            # fall back to MUSIC_CHAT, must go straight to the model without business tools.
+            # Intent hints remain useful for tool-backed routes, but are not a permission
+            # boundary by themselves.
+            tools = (
+                []
+                if recognized.name == Intent.MUSIC_CHAT
+                else self.registry.tools_for(project_id)
+            )
+            agent = create_agent(model=self._chat_model(), tools=tools,
                                  system_prompt=active_prompt)
             async for event in agent.astream_events(
                 {"messages": messages}, config={"recursion_limit": 16}, version="v2"

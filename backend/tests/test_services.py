@@ -12,7 +12,7 @@ from langchain_core.messages import AIMessage
 from pydantic import ValidationError
 
 from backend.agent.agent import DropItAgent, MODEL_NOT_CONFIGURED_ERROR
-from backend.agent.intent import IntentRecognizer, OVERSTEP_RESPONSE
+from backend.agent.intent import IntentRecognizer, OllamaIntentFallback, OVERSTEP_RESPONSE
 from backend.agent.memory import ShortTermMemory
 from backend.config import Settings
 from backend.workers.analyze_track import JobRunner
@@ -402,6 +402,43 @@ def test_agent_refuses_overstep_without_calling_chat_model_or_tools():
         assert events[-1]["message"]["content"] == OVERSTEP_RESPONSE
         assert events[-1]["message"]["tool_events"] == []
         assert events[-1]["playlist"] is None
+    finally:
+        store.close()
+
+
+def test_agent_routes_invalid_intent_to_tool_free_music_chat():
+    store = DropItStore(":memory:")
+    try:
+        project = store.create_project("Music chat")
+        registry = DropItToolRegistry(store, FakeEmbedder())
+        settings = Settings(_env_file=None, DEEPSEEK_API_KEY="test-only")
+
+        class InvalidFallback:
+            def classify(self, text):
+                return OllamaIntentFallback._parse("not valid JSON")
+
+        agent = DropItAgent(
+            store,
+            registry,
+            settings,
+            intent=IntentRecognizer(fallback=InvalidFallback()),
+        )
+
+        class Model(FakeMessagesListChatModel):
+            def bind_tools(self, tools, **kwargs):
+                raise AssertionError("music_chat must not bind business tools")
+
+        model = Model(responses=[AIMessage(content="可以，我在。")])
+        agent._chat_model = lambda: model
+        conversation = store.ensure_default_conversation(project.id)
+
+        async def collect():
+            return [event async for event in agent.stream_chat(project.id, conversation.id, "111")]
+
+        events = asyncio.run(collect())
+        assert events[-1]["type"] == "complete"
+        assert events[-1]["message"]["content"] == "可以，我在。"
+        assert events[-1]["message"]["tool_events"] == []
     finally:
         store.close()
 

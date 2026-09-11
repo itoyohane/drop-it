@@ -1,0 +1,17 @@
+# 问题记录：无效意图误调用曲库工具
+
+## 问题是什么
+
+输入纯数字 `111` 时，偶发被 `search_library` 当作无参查询，返回前 20 首曲目；同一会话第一次未调用工具，第二次却调用了工具。
+
+## 为什么会出现
+
+规则路由没有匹配 `111`，Ollama 未返回有效 JSON 后降级为 `music_chat`。但 `music_chat` 只是写入 Agent Prompt 的提示，Agent 仍暴露全部三个业务工具；主模型受历史上下文和采样参数影响，可能自行调用默认的 `search_library(limit=20)`。
+
+## 怎么解决
+
+在 Agent 工具路由层增加硬隔离：`music_chat`（包括无效分类的降级结果）使用主模型但传入空工具列表；只有搜索、相似歌曲和 DJ Set 意图才暴露业务工具。
+
+## 验证与复盘
+
+新增回归测试覆盖 Ollama 无效分类输入 `111`，确认主模型仍能回答且 `tool_events=[]`；相关测试共 33 项通过。关键实现见 `backend/agent/agent.py`，测试见 `backend/tests/test_services.py`。
