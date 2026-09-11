@@ -6,12 +6,12 @@
 
 ## 为什么会出现
 
-规则路由没有匹配 `111`，Ollama 未返回有效 JSON 后降级为 `music_chat`。但 `music_chat` 只是写入 Agent Prompt 的提示，Agent 仍暴露全部三个业务工具；主模型受历史上下文和采样参数影响，可能自行调用默认的 `search_library(limit=20)`。
+规则路由没有匹配 `111`，只能交给 Ollama；无效输出虽降级为 `music_chat`，通用 Prompt 却仍声称拥有三个工具，导致主模型可能生成 `search_library` 调用，甚至把内部 DSML 协议当普通文本输出。
 
 ## 怎么解决
 
-在 `intent.py` 的路由结果中明确工具权限：`music_chat`（包括无效分类的降级结果）改用独立的无工具 Prompt，并直接调用主模型；只有搜索、相似歌曲和 DJ Set 意图才进入工具 Agent。返回前同时拦截意外生成的 DSML/工具协议文本。
+在 `intent.py` 新增显式 `music_chat` 规则：纯数字、符号和常见寒暄直接进入无工具路由；Ollama 无效分类也继续降级到该路由。Agent 保持统一执行流程，仅按路由结果绑定工具；通用 Prompt 改为条件化描述工具，并禁止输出 DSML 等内部协议。
 
 ## 验证与复盘
 
-新增回归测试覆盖 Ollama 无效分类输入 `111` 和 DSML 文本泄漏，确认主模型仍能回答且 `tool_events=[]`。关键实现见 `backend/agent/intent.py` 与 `backend/agent/agent.py`，测试见 `backend/tests/test_services.py`。
+回归测试覆盖 `111` 不调用 Ollama、无效 Ollama 输出降级以及 `music_chat` 不绑定工具，并检查 Prompt 不再声称始终拥有工具。关键实现见 `backend/agent/intent.py`，测试见 `backend/tests/test_intent_memory.py` 和 `backend/tests/test_services.py`。

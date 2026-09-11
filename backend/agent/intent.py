@@ -136,6 +136,10 @@ class IntentRecognizer:
     _set_terms = ("dj set", "set", "歌单", "编排", "排歌", "混音", "暖场", "开场", "峰值时段")
     _similar_terms = ("相似", "类似", "像这首", "接在后面", "下一首", "similar", "sounds like")
     _search_terms = ("找歌", "搜歌", "搜索", "曲库", "有哪些歌", "歌曲", "track", "library", "bpm", "调性")
+    _music_chat_phrases = frozenset({
+        "你好", "您好", "嗨", "哈喽", "hello", "hi", "在吗", "你是谁", "谢谢", "再见",
+    })
+    _non_request_pattern = re.compile(r"[\W\d_]+", re.UNICODE)
 
     def __init__(self, fallback: IntentFallback | None = None):
         self.fallback = fallback
@@ -150,6 +154,12 @@ class IntentRecognizer:
             return IntentResult(Intent.FIND_SIMILAR, .9, "先确认参考 track_id，再调用 find_similar_tracks。")
         if any(term in normalized for term in self._search_terms):
             return IntentResult(Intent.SEARCH_LIBRARY, .86, "使用 search_library 获取当前曲库证据。")
+        if normalized in self._music_chat_phrases or self._non_request_pattern.fullmatch(normalized):
+            return IntentResult(
+                Intent.MUSIC_CHAT,
+                .98,
+                "输入没有明确的曲库或 DJ 任务，直接闲聊或请求澄清，不得调用业务工具。",
+            )
         if self.fallback is not None:
             try:
                 return self.fallback.classify(text)

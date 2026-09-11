@@ -26,6 +26,8 @@ def test_intent_recognizer_uses_fallback_only_after_rules_miss():
     recognizer = IntentRecognizer(fallback=fallback)
 
     assert recognizer.recognize("帮我找歌").name == Intent.SEARCH_LIBRARY
+    numeric = recognizer.recognize("111")
+    assert numeric.name == Intent.MUSIC_CHAT and not numeric.allows_tools
     assert recognizer.recognize("这首适合什么场景？").name == Intent.FIND_SIMILAR
     assert fallback.calls == ["这首适合什么场景？"]
 
