@@ -293,6 +293,9 @@ def create_app(settings: Settings | None = None, *, embedder: TextEmbedder | Non
 
     @app.delete("/api/projects/{project_id}/library/{track_id}", status_code=204)
     def remove_track(project_id: str, track_id: str):
+        project = project_or_404(store, project_id)
+        if project.scope == "global":
+            raise HTTPException(400, "总曲库由各项目汇总，不能直接删除歌曲")
         if not store.remove_track_from_project(project_id, track_id):
             raise HTTPException(404, "曲目不在当前项目")
         return Response(status_code=204)

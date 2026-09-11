@@ -72,7 +72,7 @@
 | `POST /api/projects/{id}/library/import-files` | multipart：`source_id`、`files` | 保存支持的文件并创建分析任务，202 |
 | `POST /api/projects/{id}/library/analyze` | `{"track_ids":[]}` | 空数组补缺失阶段；明确 ID 强制重分析，202 |
 | `PATCH /api/projects/{id}/library/{track_id}` | 完整 `TrackUpdate` | 修改标题、艺人、BPM、调性、Camelot、能量 |
-| `DELETE /api/projects/{id}/library/{track_id}` | 无 | 从项目解绑，204 |
+| `DELETE /api/projects/{id}/library/{track_id}` | 无 | 从当前项目解绑，204；不会删除总曲库中的原曲目。对 `global-chat` 调用会返回 400 |
 | `GET /api/projects/{id}/jobs` | 无 | 最近任务 |
 | `GET /api/jobs/{job_id}` | 无 | 单个任务 |
 

@@ -1,8 +1,8 @@
 {
   "name": "dropit-dj-copilot",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "Local-first DJ set copilot web prototype",
+  "description": "Production-ready DJ library analysis and set planning copilot",
   "author": "itoyohane",
   "scripts": {
     "dev": "concurrently -k \"npm:dev:api\" \"npm:dev:web\"",
@@ -10,7 +10,7 @@
     "dev:web": "vite --host 127.0.0.1",
     "build": "vite build",
     "start": "python -m uvicorn backend.main:app --host 0.0.0.0 --port 8765",
-    "test": "python -m pytest backend/tests -q"
+    "test": "python -m pytest backend/tests -q -p no:cacheprovider"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.7",

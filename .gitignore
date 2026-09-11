@@ -5,6 +5,7 @@ dist/
 __pycache__/
 *.pyc
 test_tmp*/
+.dropit-test-bootstrap-*/
 .env
 .env.local
 .venv/

@@ -1,4 +1,6 @@
 import os
+import shutil
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -6,12 +8,23 @@ import pytest
 
 # Prevent the module-level ASGI app from opening a developer's real database.
 os.environ["DROPIT_ENV"] = "test"
-os.environ["DROPIT_DATA_DIR"] = str(Path.cwd() / "data" / "test-bootstrap")
+_bootstrap_dir = Path.cwd() / f".dropit-test-bootstrap-{os.getpid()}"
+_bootstrap_dir.mkdir(exist_ok=True)
+os.environ["DROPIT_DATA_DIR"] = str(_bootstrap_dir)
 os.environ["DEEPSEEK_API_KEY"] = ""
 
 from backend.models import Track
 from backend.agent.tools import DropItToolRegistry
 from backend.repositories import DropItStore
+
+
+def pytest_sessionfinish(session, exitstatus):
+    main_module = sys.modules.get("backend.main")
+    global_app = getattr(main_module, "app", None)
+    if global_app is not None:
+        global_app.state.jobs.close()
+        global_app.state.store.close()
+    shutil.rmtree(_bootstrap_dir, ignore_errors=True)
 
 
 class FakeEmbedder:

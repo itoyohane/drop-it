@@ -311,6 +311,26 @@ def test_api_upload_analysis_and_metadata_update(tmp_path):
         assert app.state.registry.search(project["id"], "techno")[0].track.title == "Edited"
 
 
+def test_remove_track_endpoint_unlinks_only_current_project(tmp_path):
+    settings = Settings(_env_file=None, DROPIT_DATA_DIR=tmp_path, DEEPSEEK_API_KEY="")
+    app = create_app(settings, embedder=FakeEmbedder(), descriptor=FakeDescriptor(), analyzer=FakeAnalyzer())
+    with TestClient(app) as client:
+        project = app.state.store.create_project("Delete from project")
+        other = app.state.store.create_project("Keep shared track")
+        track = add_track(app.state.store, project, "Shared song", [1, 0, 0])
+        app.state.store.upsert_track(track, track.id, other.id)
+
+        response = client.delete(f"/api/projects/{project.id}/library/{track.id}")
+        assert response.status_code == 204
+        assert client.get(f"/api/projects/{project.id}/library").json()["tracks"] == []
+        assert client.get(f"/api/projects/{other.id}/library").json()["tracks"][0]["id"] == track.id
+        assert client.get("/api/library").json()["tracks"][0]["id"] == track.id
+
+        global_delete = client.delete(f"/api/projects/{GLOBAL_PROJECT_ID}/library/{track.id}")
+        assert global_delete.status_code == 400
+        assert "总曲库" in global_delete.json()["detail"]
+
+
 def test_chat_unconfigured_does_not_persist_turn(tmp_path):
     app = create_app(Settings(_env_file=None, DROPIT_DATA_DIR=tmp_path, DEEPSEEK_API_KEY=""))
     with TestClient(app) as client:
