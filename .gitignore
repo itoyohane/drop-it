@@ -11,3 +11,4 @@ test_tmp*/
 .venv/
 data/
 pytest-cache-files-*/
+tests/sample song/

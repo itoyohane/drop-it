@@ -1,0 +1,5866 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-09-12T13:22:15.791196+00:00",
+  "evaluation_scope": {
+    "project_id": "5f7da62c60e9419986f1b7214c0e9691",
+    "project_name": "md",
+    "project_vectorized_tracks": 74,
+    "intent_cases_per_round": 25,
+    "tool_cases_per_round": 8,
+    "rag_cases_per_round": 5,
+    "chat_model": "deepseek-flash",
+    "intent_model": "minicpm5-2b",
+    "embedding_model": "qwen3.7-text-embedding@api:dashscope-v1"
+  },
+  "methodology": {
+    "vectorized_tracks": "SQLite current-model ready rows intersected with valid Chroma vectors",
+    "intent_accuracy": "exact match against 25 human-authored, class-balanced labels",
+    "tool_success": "ToolResult.ok plus output-contract, project-scope and constraint checks",
+    "rag_accuracy": "Hit@3 self-retrieval using held-out evaluation calls over indexed descriptions",
+    "rag_truthfulness": "atomic returned evidence fields matched against SQLite source facts"
+  },
+  "aggregate": {
+    "rounds": 7,
+    "vectorized_tracks": 78,
+    "vector_integrity_rate_pct": 100.0,
+    "intent_accuracy_pct": 84.0,
+    "intent_passed": 147,
+    "intent_total": 175,
+    "intent_round_accuracy_stddev_pct": 0.0,
+    "tool_success_rate_pct": 100.0,
+    "tool_passed": 56,
+    "tool_total": 56,
+    "rag_accuracy_pct": 100.0,
+    "rag_hits_at_3": 35,
+    "rag_queries": 35,
+    "rag_truthfulness_pct": 100.0,
+    "rag_facts_verified": 1260,
+    "rag_facts_checked": 1260
+  },
+  "rounds": [
+    {
+      "round": 1,
+      "started_at": "2026-09-12T13:15:35.816653+00:00",
+      "vector_audit": {
+        "imported_tracks": 275,
+        "sqlite_current_ready": 78,
+        "chroma_authorized_vectors": 78,
+        "valid_vectorized_tracks": 78,
+        "invalid_vectors": [],
+        "orphan_authorized_vectors": [],
+        "dimensions": 1024,
+        "model_key": "qwen3.7-text-embedding@api:dashscope-v1",
+        "integrity_rate_pct": 100.0
+      },
+      "intent": {
+        "passed": 21,
+        "total": 25,
+        "accuracy_pct": 84.0,
+        "macro_f1_pct": 84.84,
+        "per_class": {
+          "find_similar_tracks": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 60.0,
+            "f1_pct": 75.0
+          },
+          "generate_dj_set": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 100.0,
+            "f1_pct": 100.0
+          },
+          "music_chat": {
+            "support": 5,
+            "precision_pct": 55.56,
+            "recall_pct": 100.0,
+            "f1_pct": 71.43
+          },
+          "overstep": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 80.0,
+            "f1_pct": 88.89
+          },
+          "search_library": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 80.0,
+            "f1_pct": 88.89
+          }
+        },
+        "cases": [
+          {
+            "id": "search-01",
+            "text": "曲库里有哪些 120 到 128 BPM 的歌？",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-02",
+            "text": "帮我找歌，调性是 8A。",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-03",
+            "text": "Search my local library for high-energy tracks.",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-04",
+            "text": "搜索艺人 NURKO 的作品。",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-05",
+            "text": "我想看看本地收藏里速度适中的音乐。",
+            "expected": "search_library",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          },
+          {
+            "id": "similar-01",
+            "text": "找几首和这首相似的歌。",
+            "expected": "find_similar_tracks",
+            "actual": "find_similar_tracks",
+            "confidence": 0.9,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "similar-02",
+            "text": "这首后面下一首放什么？",
+            "expected": "find_similar_tracks",
+            "actual": "find_similar_tracks",
+            "confidence": 0.9,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "similar-03",
+            "text": "Find something that sounds like this track.",
+            "expected": "find_similar_tracks",
+            "actual": "find_similar_tracks",
+            "confidence": 0.9,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "similar-04",
+            "text": "这首适合接什么？",
+            "expected": "find_similar_tracks",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          },
+          {
+            "id": "similar-05",
+            "text": "以刚才那首为参考推荐几个替代曲目。",
+            "expected": "find_similar_tracks",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          },
+          {
+            "id": "set-01",
+            "text": "帮我编排一个 45 分钟的 DJ Set。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-02",
+            "text": "做一份逐步升温的歌单。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-03",
+            "text": "排歌：前半段平稳，后半段达到峰值。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-04",
+            "text": "给今晚的暖场安排 30 分钟音乐。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-05",
+            "text": "Create a one-hour set between 118 and 132 BPM.",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-01",
+            "text": "解释一下 Camelot wheel。",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-02",
+            "text": "侧链压缩在电子音乐里有什么作用？",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-03",
+            "text": "DJ 过渡时为什么要注意拍点？",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-04",
+            "text": "大调和小调听感上通常有什么区别？",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-05",
+            "text": "你好，聊聊音乐吧。",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.9,
+            "route_source": "ollama",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-01",
+            "text": "帮我写一段 Python 爬虫代码。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-02",
+            "text": "分析一下这只股票是否值得买。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-03",
+            "text": "总结今天最新政治新闻。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-04",
+            "text": "根据症状给我医疗诊断。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-05",
+            "text": "查一下 Spotify 实时排行榜。",
+            "expected": "overstep",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          }
+        ]
+      },
+      "tools": {
+        "passed": 8,
+        "total": 8,
+        "success_rate_pct": 100.0,
+        "cases": [
+          {
+            "id": "tool-01",
+            "tool": "search_library",
+            "arguments": {
+              "query": "",
+              "filters": {
+                "bpm_min": 120,
+                "bpm_max": 135
+              },
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 5 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "177a095610a89aa389bc",
+                "title": "Aeipathy",
+                "bpm": 129.2,
+                "camelot_key": "9A"
+              },
+              {
+                "track_id": "edda4e718b5cee4f9dc2",
+                "title": "Divinorum",
+                "bpm": 123.0,
+                "camelot_key": "5A"
+              },
+              {
+                "track_id": "7553a2ed6fb640ca2ca5",
+                "title": "Stardust (with HALIENE)",
+                "bpm": 129.2,
+                "camelot_key": "1A"
+              },
+              {
+                "track_id": "443a8954af142c909182",
+                "title": "Other Side",
+                "bpm": 129.2,
+                "camelot_key": "5B"
+              },
+              {
+                "track_id": "748a4934059d57903f44",
+                "title": "Not My Night",
+                "bpm": 129.2,
+                "camelot_key": "6B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-02",
+            "tool": "search_library",
+            "arguments": {
+              "query": "",
+              "filters": {
+                "title": "Last Wil"
+              },
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 1 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "e1c0468c81291ceb3d79",
+                "title": "Last Will (Rouno Remix)",
+                "bpm": 136.0,
+                "camelot_key": "8B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-03",
+            "tool": "search_library",
+            "arguments": {
+              "query": "high energy electronic music",
+              "filters": null,
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 5 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "db6ba9d2db26c346e1d5",
+                "title": "Reminder",
+                "bpm": 143.6,
+                "camelot_key": "5B"
+              },
+              {
+                "track_id": "e8659088da83a9259fea",
+                "title": "Sherwood (2022)",
+                "bpm": 152.0,
+                "camelot_key": "12A"
+              },
+              {
+                "track_id": "482792d0e401f7a09ea2",
+                "title": "Eyes Up",
+                "bpm": 95.7,
+                "camelot_key": "10B"
+              },
+              {
+                "track_id": "bc432ebef3fa3c4af777",
+                "title": "Silent Skies",
+                "bpm": 136.0,
+                "camelot_key": "11A"
+              },
+              {
+                "track_id": "7671b1cc8a0c8825db95",
+                "title": "Homura (Dabin Remix)",
+                "bpm": 152.0,
+                "camelot_key": "12B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-04",
+            "tool": "search_library",
+            "arguments": {
+              "query": "",
+              "filters": {
+                "title": "__dropit_eval_no_match__"
+              },
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 0 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [],
+            "passed": true
+          },
+          {
+            "id": "tool-05",
+            "tool": "find_similar_tracks",
+            "arguments": {
+              "track_id": "e1c0468c81291ceb3d79",
+              "limit": 3,
+              "filters": null
+            },
+            "result_ok": true,
+            "summary": "找到 3 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "6d79b5100546acb24081",
+                "title": "Colorblind",
+                "bpm": 136.0,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "4c248475f2291cf589de",
+                "title": "Sideways",
+                "bpm": 143.6,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "99098c0f20a54163ef22",
+                "title": "Kids (with Miranda Glory)",
+                "bpm": 152.0,
+                "camelot_key": "8B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-06",
+            "tool": "find_similar_tracks",
+            "arguments": {
+              "track_id": "e1c0468c81291ceb3d79",
+              "limit": 5,
+              "filters": {
+                "bpm_min": 60,
+                "bpm_max": 220
+              }
+            },
+            "result_ok": true,
+            "summary": "找到 5 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "6d79b5100546acb24081",
+                "title": "Colorblind",
+                "bpm": 136.0,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "4c248475f2291cf589de",
+                "title": "Sideways",
+                "bpm": 143.6,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "99098c0f20a54163ef22",
+                "title": "Kids (with Miranda Glory)",
+                "bpm": 152.0,
+                "camelot_key": "8B"
+              },
+              {
+                "track_id": "be3a37ab0183c3969ec2",
+                "title": "What You Need",
+                "bpm": 136.0,
+                "camelot_key": "4B"
+              },
+              {
+                "track_id": "51be5299f3a44a67f8dd",
+                "title": "Silence",
+                "bpm": 143.6,
+                "camelot_key": "8A"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-07",
+            "tool": "generate_dj_set",
+            "arguments": {
+              "request": "quality eval round 1 build",
+              "duration_min": 10,
+              "bpm_min": 60,
+              "bpm_max": 220,
+              "energy_curve": "build",
+              "style_query": ""
+            },
+            "result_ok": true,
+            "summary": "已生成 2 首、约 9 分钟的 Set。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "bc432ebef3fa3c4af777",
+                "title": "Silent Skies",
+                "bpm": 136.0,
+                "camelot_key": "11A"
+              },
+              {
+                "track_id": "a722fbb037e89aecce9f",
+                "title": "Snowblind",
+                "bpm": 136.0,
+                "camelot_key": "11A"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-08",
+            "tool": "generate_dj_set",
+            "arguments": {
+              "request": "quality eval round 1 scoped",
+              "duration_min": 10,
+              "bpm_min": 60,
+              "bpm_max": 220,
+              "energy_curve": "steady",
+              "style_query": "",
+              "track_ids": [
+                "040d8aecd4b178302f91",
+                "c905b7a001da1a61945c",
+                "482792d0e401f7a09ea2",
+                "d92887a5d63be97e5351",
+                "252c1f7d28ed1ead6f0d",
+                "5e146bf976728898b357",
+                "7e3ac38d08fafc30b836",
+                "8be4e1da6336d64698a3",
+                "416b57d312cf3e3ecf16",
+                "668fc1ecb6b4b414c6c0",
+                "8e656e9bafae84ab376d",
+                "a8df75fc21f64d3dc7ea",
+                "bde89636f09f1ccb27ab",
+                "ca5015bf4301c9e18a0d",
+                "e1556d1e22847958ac6f",
+                "e6a6a00281a127875d96",
+                "43ab50199dc212585f04",
+                "39d806aa331d1ba936f8",
+                "7ab79c6cc8e754f9506b",
+                "816887e3f689b6883ca8"
+              ]
+            },
+            "result_ok": true,
+            "summary": "已生成 3 首、约 10 分钟的 Set。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "482792d0e401f7a09ea2",
+                "title": "Eyes Up",
+                "bpm": 95.7,
+                "camelot_key": "10B"
+              },
+              {
+                "track_id": "668fc1ecb6b4b414c6c0",
+                "title": "Don't Let Go",
+                "bpm": 103.4,
+                "camelot_key": "11B"
+              },
+              {
+                "track_id": "ca5015bf4301c9e18a0d",
+                "title": "Golden Hour (Chime Remix)",
+                "bpm": 107.7,
+                "camelot_key": "12B"
+              }
+            ],
+            "passed": true
+          }
+        ]
+      },
+      "rag": {
+        "accuracy_definition": "gold track returned in Top-3 for its indexed description",
+        "truthfulness_definition": "every returned evidence field exactly matches the project-scoped SQLite fact",
+        "hits_at_3": 5,
+        "queries": 5,
+        "accuracy_pct": 100.0,
+        "mrr_pct": 100.0,
+        "facts_verified": 180,
+        "facts_checked": 180,
+        "truthfulness_pct": 100.0,
+        "cases": [
+          {
+            "id": "rag-01",
+            "gold_track_id": "015c9014efbd753ee838",
+            "gold_title": "Light In The Dark",
+            "query": "music audio; 143.6 BPM; key G minor; Camelot 6A; energy 0.96; spectral centroid 2668 Hz; onset strength 1.20",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "015c9014efbd753ee838",
+                "title": "Light In The Dark",
+                "score": 0.999999,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "39d806aa331d1ba936f8",
+                "title": "Cursed",
+                "score": 0.95605,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "76c29652ff3a281229fe",
+                "title": "Tomorrow",
+                "score": 0.949844,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-02",
+            "gold_track_id": "040d8aecd4b178302f91",
+            "gold_title": "Ones I Used To Love",
+            "query": "music audio; 86.1 BPM; key D major; Camelot 10B; energy 0.93; spectral centroid 2696 Hz; onset strength 1.16",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "040d8aecd4b178302f91",
+                "title": "Ones I Used To Love",
+                "score": 0.999999,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "60e8f59948fa481ec33e",
+                "title": "More Than I Can Say",
+                "score": 0.979295,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "7ab79c6cc8e754f9506b",
+                "title": "Homesick (feat. SOUNDR)",
+                "score": 0.964785,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-03",
+            "gold_track_id": "068777e4dcf62b2fc032",
+            "gold_title": "Feel Again",
+            "query": "music audio; 152.0 BPM; key C# major; Camelot 3B; energy 0.93; spectral centroid 2272 Hz; onset strength 1.32",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "068777e4dcf62b2fc032",
+                "title": "Feel Again",
+                "score": 1.0,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "b7dc059c1678e343d6f7",
+                "title": "You Can Be My Light (feat. Monika Santucci)",
+                "score": 0.998285,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "8f27caa2b21f0f7dfa0b",
+                "title": "All We Get",
+                "score": 0.997596,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-04",
+            "gold_track_id": "0d96d1ecce8e1483e9f5",
+            "gold_title": "WARP DRIVE",
+            "query": "music audio; 152.0 BPM; key E minor; Camelot 9A; energy 0.92; spectral centroid 2744 Hz; onset strength 1.39",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "0d96d1ecce8e1483e9f5",
+                "title": "WARP DRIVE",
+                "score": 1.0,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "3e4d8f1fe1f432b58b17",
+                "title": "Leave The Light On",
+                "score": 0.998443,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "177a095610a89aa389bc",
+                "title": "Aeipathy",
+                "score": 0.967156,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-05",
+            "gold_track_id": "13b033711643e23b252a",
+            "gold_title": "Grand Escape (Teminite Remix)",
+            "query": "music audio; 152.0 BPM; key F# minor; Camelot 11A; energy 0.89; spectral centroid 2928 Hz; onset strength 1.07",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "13b033711643e23b252a",
+                "title": "Grand Escape (Teminite Remix)",
+                "score": 1.0,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "4c8adac455c708c42e3b",
+                "title": "Space Between",
+                "score": 0.958969,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "a722fbb037e89aecce9f",
+                "title": "Snowblind",
+                "score": 0.952799,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          }
+        ]
+      }
+    },
+    {
+      "round": 2,
+      "started_at": "2026-09-12T13:16:34.423913+00:00",
+      "vector_audit": {
+        "imported_tracks": 275,
+        "sqlite_current_ready": 78,
+        "chroma_authorized_vectors": 78,
+        "valid_vectorized_tracks": 78,
+        "invalid_vectors": [],
+        "orphan_authorized_vectors": [],
+        "dimensions": 1024,
+        "model_key": "qwen3.7-text-embedding@api:dashscope-v1",
+        "integrity_rate_pct": 100.0
+      },
+      "intent": {
+        "passed": 21,
+        "total": 25,
+        "accuracy_pct": 84.0,
+        "macro_f1_pct": 84.84,
+        "per_class": {
+          "find_similar_tracks": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 60.0,
+            "f1_pct": 75.0
+          },
+          "generate_dj_set": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 100.0,
+            "f1_pct": 100.0
+          },
+          "music_chat": {
+            "support": 5,
+            "precision_pct": 55.56,
+            "recall_pct": 100.0,
+            "f1_pct": 71.43
+          },
+          "overstep": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 80.0,
+            "f1_pct": 88.89
+          },
+          "search_library": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 80.0,
+            "f1_pct": 88.89
+          }
+        },
+        "cases": [
+          {
+            "id": "search-01",
+            "text": "曲库里有哪些 120 到 128 BPM 的歌？",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-02",
+            "text": "帮我找歌，调性是 8A。",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-03",
+            "text": "Search my local library for high-energy tracks.",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-04",
+            "text": "搜索艺人 NURKO 的作品。",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-05",
+            "text": "我想看看本地收藏里速度适中的音乐。",
+            "expected": "search_library",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          },
+          {
+            "id": "similar-01",
+            "text": "找几首和这首相似的歌。",
+            "expected": "find_similar_tracks",
+            "actual": "find_similar_tracks",
+            "confidence": 0.9,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "similar-02",
+            "text": "这首后面下一首放什么？",
+            "expected": "find_similar_tracks",
+            "actual": "find_similar_tracks",
+            "confidence": 0.9,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "similar-03",
+            "text": "Find something that sounds like this track.",
+            "expected": "find_similar_tracks",
+            "actual": "find_similar_tracks",
+            "confidence": 0.9,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "similar-04",
+            "text": "这首适合接什么？",
+            "expected": "find_similar_tracks",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          },
+          {
+            "id": "similar-05",
+            "text": "以刚才那首为参考推荐几个替代曲目。",
+            "expected": "find_similar_tracks",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          },
+          {
+            "id": "set-01",
+            "text": "帮我编排一个 45 分钟的 DJ Set。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-02",
+            "text": "做一份逐步升温的歌单。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-03",
+            "text": "排歌：前半段平稳，后半段达到峰值。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-04",
+            "text": "给今晚的暖场安排 30 分钟音乐。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-05",
+            "text": "Create a one-hour set between 118 and 132 BPM.",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-01",
+            "text": "解释一下 Camelot wheel。",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-02",
+            "text": "侧链压缩在电子音乐里有什么作用？",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-03",
+            "text": "DJ 过渡时为什么要注意拍点？",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-04",
+            "text": "大调和小调听感上通常有什么区别？",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-05",
+            "text": "你好，聊聊音乐吧。",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.9,
+            "route_source": "ollama",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-01",
+            "text": "帮我写一段 Python 爬虫代码。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-02",
+            "text": "分析一下这只股票是否值得买。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-03",
+            "text": "总结今天最新政治新闻。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-04",
+            "text": "根据症状给我医疗诊断。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-05",
+            "text": "查一下 Spotify 实时排行榜。",
+            "expected": "overstep",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          }
+        ]
+      },
+      "tools": {
+        "passed": 8,
+        "total": 8,
+        "success_rate_pct": 100.0,
+        "cases": [
+          {
+            "id": "tool-01",
+            "tool": "search_library",
+            "arguments": {
+              "query": "",
+              "filters": {
+                "bpm_min": 120,
+                "bpm_max": 135
+              },
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 5 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "177a095610a89aa389bc",
+                "title": "Aeipathy",
+                "bpm": 129.2,
+                "camelot_key": "9A"
+              },
+              {
+                "track_id": "edda4e718b5cee4f9dc2",
+                "title": "Divinorum",
+                "bpm": 123.0,
+                "camelot_key": "5A"
+              },
+              {
+                "track_id": "7553a2ed6fb640ca2ca5",
+                "title": "Stardust (with HALIENE)",
+                "bpm": 129.2,
+                "camelot_key": "1A"
+              },
+              {
+                "track_id": "443a8954af142c909182",
+                "title": "Other Side",
+                "bpm": 129.2,
+                "camelot_key": "5B"
+              },
+              {
+                "track_id": "748a4934059d57903f44",
+                "title": "Not My Night",
+                "bpm": 129.2,
+                "camelot_key": "6B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-02",
+            "tool": "search_library",
+            "arguments": {
+              "query": "",
+              "filters": {
+                "title": "Last Wil"
+              },
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 1 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "e1c0468c81291ceb3d79",
+                "title": "Last Will (Rouno Remix)",
+                "bpm": 136.0,
+                "camelot_key": "8B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-03",
+            "tool": "search_library",
+            "arguments": {
+              "query": "high energy electronic music",
+              "filters": null,
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 5 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "db6ba9d2db26c346e1d5",
+                "title": "Reminder",
+                "bpm": 143.6,
+                "camelot_key": "5B"
+              },
+              {
+                "track_id": "e8659088da83a9259fea",
+                "title": "Sherwood (2022)",
+                "bpm": 152.0,
+                "camelot_key": "12A"
+              },
+              {
+                "track_id": "482792d0e401f7a09ea2",
+                "title": "Eyes Up",
+                "bpm": 95.7,
+                "camelot_key": "10B"
+              },
+              {
+                "track_id": "bc432ebef3fa3c4af777",
+                "title": "Silent Skies",
+                "bpm": 136.0,
+                "camelot_key": "11A"
+              },
+              {
+                "track_id": "7671b1cc8a0c8825db95",
+                "title": "Homura (Dabin Remix)",
+                "bpm": 152.0,
+                "camelot_key": "12B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-04",
+            "tool": "search_library",
+            "arguments": {
+              "query": "",
+              "filters": {
+                "title": "__dropit_eval_no_match__"
+              },
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 0 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [],
+            "passed": true
+          },
+          {
+            "id": "tool-05",
+            "tool": "find_similar_tracks",
+            "arguments": {
+              "track_id": "e1c0468c81291ceb3d79",
+              "limit": 3,
+              "filters": null
+            },
+            "result_ok": true,
+            "summary": "找到 3 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "6d79b5100546acb24081",
+                "title": "Colorblind",
+                "bpm": 136.0,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "4c248475f2291cf589de",
+                "title": "Sideways",
+                "bpm": 143.6,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "99098c0f20a54163ef22",
+                "title": "Kids (with Miranda Glory)",
+                "bpm": 152.0,
+                "camelot_key": "8B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-06",
+            "tool": "find_similar_tracks",
+            "arguments": {
+              "track_id": "e1c0468c81291ceb3d79",
+              "limit": 5,
+              "filters": {
+                "bpm_min": 60,
+                "bpm_max": 220
+              }
+            },
+            "result_ok": true,
+            "summary": "找到 5 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "6d79b5100546acb24081",
+                "title": "Colorblind",
+                "bpm": 136.0,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "4c248475f2291cf589de",
+                "title": "Sideways",
+                "bpm": 143.6,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "99098c0f20a54163ef22",
+                "title": "Kids (with Miranda Glory)",
+                "bpm": 152.0,
+                "camelot_key": "8B"
+              },
+              {
+                "track_id": "be3a37ab0183c3969ec2",
+                "title": "What You Need",
+                "bpm": 136.0,
+                "camelot_key": "4B"
+              },
+              {
+                "track_id": "51be5299f3a44a67f8dd",
+                "title": "Silence",
+                "bpm": 143.6,
+                "camelot_key": "8A"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-07",
+            "tool": "generate_dj_set",
+            "arguments": {
+              "request": "quality eval round 2 build",
+              "duration_min": 10,
+              "bpm_min": 60,
+              "bpm_max": 220,
+              "energy_curve": "build",
+              "style_query": ""
+            },
+            "result_ok": true,
+            "summary": "已生成 2 首、约 9 分钟的 Set。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "bc432ebef3fa3c4af777",
+                "title": "Silent Skies",
+                "bpm": 136.0,
+                "camelot_key": "11A"
+              },
+              {
+                "track_id": "a722fbb037e89aecce9f",
+                "title": "Snowblind",
+                "bpm": 136.0,
+                "camelot_key": "11A"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-08",
+            "tool": "generate_dj_set",
+            "arguments": {
+              "request": "quality eval round 2 scoped",
+              "duration_min": 10,
+              "bpm_min": 60,
+              "bpm_max": 220,
+              "energy_curve": "steady",
+              "style_query": "",
+              "track_ids": [
+                "040d8aecd4b178302f91",
+                "c905b7a001da1a61945c",
+                "482792d0e401f7a09ea2",
+                "d92887a5d63be97e5351",
+                "252c1f7d28ed1ead6f0d",
+                "5e146bf976728898b357",
+                "7e3ac38d08fafc30b836",
+                "8be4e1da6336d64698a3",
+                "416b57d312cf3e3ecf16",
+                "668fc1ecb6b4b414c6c0",
+                "8e656e9bafae84ab376d",
+                "a8df75fc21f64d3dc7ea",
+                "bde89636f09f1ccb27ab",
+                "ca5015bf4301c9e18a0d",
+                "e1556d1e22847958ac6f",
+                "e6a6a00281a127875d96",
+                "43ab50199dc212585f04",
+                "39d806aa331d1ba936f8",
+                "7ab79c6cc8e754f9506b",
+                "816887e3f689b6883ca8"
+              ]
+            },
+            "result_ok": true,
+            "summary": "已生成 3 首、约 10 分钟的 Set。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "482792d0e401f7a09ea2",
+                "title": "Eyes Up",
+                "bpm": 95.7,
+                "camelot_key": "10B"
+              },
+              {
+                "track_id": "668fc1ecb6b4b414c6c0",
+                "title": "Don't Let Go",
+                "bpm": 103.4,
+                "camelot_key": "11B"
+              },
+              {
+                "track_id": "ca5015bf4301c9e18a0d",
+                "title": "Golden Hour (Chime Remix)",
+                "bpm": 107.7,
+                "camelot_key": "12B"
+              }
+            ],
+            "passed": true
+          }
+        ]
+      },
+      "rag": {
+        "accuracy_definition": "gold track returned in Top-3 for its indexed description",
+        "truthfulness_definition": "every returned evidence field exactly matches the project-scoped SQLite fact",
+        "hits_at_3": 5,
+        "queries": 5,
+        "accuracy_pct": 100.0,
+        "mrr_pct": 100.0,
+        "facts_verified": 180,
+        "facts_checked": 180,
+        "truthfulness_pct": 100.0,
+        "cases": [
+          {
+            "id": "rag-01",
+            "gold_track_id": "177a095610a89aa389bc",
+            "gold_title": "Aeipathy",
+            "query": "music audio; 129.2 BPM; key E minor; Camelot 9A; energy 0.97; spectral centroid 3209 Hz; onset strength 1.17",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "177a095610a89aa389bc",
+                "title": "Aeipathy",
+                "score": 0.999999,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "0d96d1ecce8e1483e9f5",
+                "title": "WARP DRIVE",
+                "score": 0.967176,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "3e4d8f1fe1f432b58b17",
+                "title": "Leave The Light On",
+                "score": 0.965507,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-02",
+            "gold_track_id": "2217e111d603e8ac0a38",
+            "gold_title": "Butterflies (feat. Dia Frampton)",
+            "query": "music audio; 143.6 BPM; key D# major; Camelot 5B; energy 0.90; spectral centroid 2494 Hz; onset strength 1.19",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "2217e111d603e8ac0a38",
+                "title": "Butterflies (feat. Dia Frampton)",
+                "score": 0.999999,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "979cf7b5029f3aa23b9a",
+                "title": "See You Again",
+                "score": 0.965955,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "db6ba9d2db26c346e1d5",
+                "title": "Reminder",
+                "score": 0.964854,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-03",
+            "gold_track_id": "2306e2d87f38c1dd8486",
+            "gold_title": "Hypersynthetic",
+            "query": "music audio; 152.0 BPM; key D minor; Camelot 7A; energy 0.89; spectral centroid 2439 Hz; onset strength 1.46",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "2306e2d87f38c1dd8486",
+                "title": "Hypersynthetic",
+                "score": 0.999999,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "ec498805028e9def2a6c",
+                "title": "The Journey",
+                "score": 0.958929,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "ca46c7b616b9f15483cc",
+                "title": "2024 ID Showcase",
+                "score": 0.93421,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-04",
+            "gold_track_id": "252c1f7d28ed1ead6f0d",
+            "gold_title": "Hurt (feat. Zack Gray)",
+            "query": "music audio; 99.4 BPM; key D# minor; Camelot 2A; energy 0.88; spectral centroid 2243 Hz; onset strength 1.12",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "252c1f7d28ed1ead6f0d",
+                "title": "Hurt (feat. Zack Gray)",
+                "score": 1.0,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "5e146bf976728898b357",
+                "title": "Electric Lady (feat. XO ELIZA)",
+                "score": 0.99905,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "ca46c7b616b9f15483cc",
+                "title": "2024 ID Showcase",
+                "score": 0.953175,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-05",
+            "gold_track_id": "2b3452449aa626e072d5",
+            "gold_title": "Loved By You",
+            "query": "music audio; 152.0 BPM; key D major; Camelot 10B; energy 0.80; spectral centroid 2328 Hz; onset strength 1.03",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "2b3452449aa626e072d5",
+                "title": "Loved By You",
+                "score": 0.999999,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "fcabeba43498d5f74973",
+                "title": "Take Me Home（Ft.Ella）",
+                "score": 0.999076,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "60e8f59948fa481ec33e",
+                "title": "More Than I Can Say",
+                "score": 0.969132,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          }
+        ]
+      }
+    },
+    {
+      "round": 3,
+      "started_at": "2026-09-12T13:17:33.454888+00:00",
+      "vector_audit": {
+        "imported_tracks": 275,
+        "sqlite_current_ready": 78,
+        "chroma_authorized_vectors": 78,
+        "valid_vectorized_tracks": 78,
+        "invalid_vectors": [],
+        "orphan_authorized_vectors": [],
+        "dimensions": 1024,
+        "model_key": "qwen3.7-text-embedding@api:dashscope-v1",
+        "integrity_rate_pct": 100.0
+      },
+      "intent": {
+        "passed": 21,
+        "total": 25,
+        "accuracy_pct": 84.0,
+        "macro_f1_pct": 84.84,
+        "per_class": {
+          "find_similar_tracks": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 60.0,
+            "f1_pct": 75.0
+          },
+          "generate_dj_set": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 100.0,
+            "f1_pct": 100.0
+          },
+          "music_chat": {
+            "support": 5,
+            "precision_pct": 55.56,
+            "recall_pct": 100.0,
+            "f1_pct": 71.43
+          },
+          "overstep": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 80.0,
+            "f1_pct": 88.89
+          },
+          "search_library": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 80.0,
+            "f1_pct": 88.89
+          }
+        },
+        "cases": [
+          {
+            "id": "search-01",
+            "text": "曲库里有哪些 120 到 128 BPM 的歌？",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-02",
+            "text": "帮我找歌，调性是 8A。",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-03",
+            "text": "Search my local library for high-energy tracks.",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-04",
+            "text": "搜索艺人 NURKO 的作品。",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-05",
+            "text": "我想看看本地收藏里速度适中的音乐。",
+            "expected": "search_library",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          },
+          {
+            "id": "similar-01",
+            "text": "找几首和这首相似的歌。",
+            "expected": "find_similar_tracks",
+            "actual": "find_similar_tracks",
+            "confidence": 0.9,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "similar-02",
+            "text": "这首后面下一首放什么？",
+            "expected": "find_similar_tracks",
+            "actual": "find_similar_tracks",
+            "confidence": 0.9,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "similar-03",
+            "text": "Find something that sounds like this track.",
+            "expected": "find_similar_tracks",
+            "actual": "find_similar_tracks",
+            "confidence": 0.9,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "similar-04",
+            "text": "这首适合接什么？",
+            "expected": "find_similar_tracks",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          },
+          {
+            "id": "similar-05",
+            "text": "以刚才那首为参考推荐几个替代曲目。",
+            "expected": "find_similar_tracks",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          },
+          {
+            "id": "set-01",
+            "text": "帮我编排一个 45 分钟的 DJ Set。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-02",
+            "text": "做一份逐步升温的歌单。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-03",
+            "text": "排歌：前半段平稳，后半段达到峰值。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-04",
+            "text": "给今晚的暖场安排 30 分钟音乐。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-05",
+            "text": "Create a one-hour set between 118 and 132 BPM.",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-01",
+            "text": "解释一下 Camelot wheel。",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-02",
+            "text": "侧链压缩在电子音乐里有什么作用？",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-03",
+            "text": "DJ 过渡时为什么要注意拍点？",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-04",
+            "text": "大调和小调听感上通常有什么区别？",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-05",
+            "text": "你好，聊聊音乐吧。",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.9,
+            "route_source": "ollama",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-01",
+            "text": "帮我写一段 Python 爬虫代码。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-02",
+            "text": "分析一下这只股票是否值得买。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-03",
+            "text": "总结今天最新政治新闻。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-04",
+            "text": "根据症状给我医疗诊断。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-05",
+            "text": "查一下 Spotify 实时排行榜。",
+            "expected": "overstep",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          }
+        ]
+      },
+      "tools": {
+        "passed": 8,
+        "total": 8,
+        "success_rate_pct": 100.0,
+        "cases": [
+          {
+            "id": "tool-01",
+            "tool": "search_library",
+            "arguments": {
+              "query": "",
+              "filters": {
+                "bpm_min": 120,
+                "bpm_max": 135
+              },
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 5 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "177a095610a89aa389bc",
+                "title": "Aeipathy",
+                "bpm": 129.2,
+                "camelot_key": "9A"
+              },
+              {
+                "track_id": "edda4e718b5cee4f9dc2",
+                "title": "Divinorum",
+                "bpm": 123.0,
+                "camelot_key": "5A"
+              },
+              {
+                "track_id": "7553a2ed6fb640ca2ca5",
+                "title": "Stardust (with HALIENE)",
+                "bpm": 129.2,
+                "camelot_key": "1A"
+              },
+              {
+                "track_id": "443a8954af142c909182",
+                "title": "Other Side",
+                "bpm": 129.2,
+                "camelot_key": "5B"
+              },
+              {
+                "track_id": "748a4934059d57903f44",
+                "title": "Not My Night",
+                "bpm": 129.2,
+                "camelot_key": "6B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-02",
+            "tool": "search_library",
+            "arguments": {
+              "query": "",
+              "filters": {
+                "title": "Last Wil"
+              },
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 1 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "e1c0468c81291ceb3d79",
+                "title": "Last Will (Rouno Remix)",
+                "bpm": 136.0,
+                "camelot_key": "8B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-03",
+            "tool": "search_library",
+            "arguments": {
+              "query": "high energy electronic music",
+              "filters": null,
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 5 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "db6ba9d2db26c346e1d5",
+                "title": "Reminder",
+                "bpm": 143.6,
+                "camelot_key": "5B"
+              },
+              {
+                "track_id": "e8659088da83a9259fea",
+                "title": "Sherwood (2022)",
+                "bpm": 152.0,
+                "camelot_key": "12A"
+              },
+              {
+                "track_id": "482792d0e401f7a09ea2",
+                "title": "Eyes Up",
+                "bpm": 95.7,
+                "camelot_key": "10B"
+              },
+              {
+                "track_id": "bc432ebef3fa3c4af777",
+                "title": "Silent Skies",
+                "bpm": 136.0,
+                "camelot_key": "11A"
+              },
+              {
+                "track_id": "7671b1cc8a0c8825db95",
+                "title": "Homura (Dabin Remix)",
+                "bpm": 152.0,
+                "camelot_key": "12B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-04",
+            "tool": "search_library",
+            "arguments": {
+              "query": "",
+              "filters": {
+                "title": "__dropit_eval_no_match__"
+              },
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 0 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [],
+            "passed": true
+          },
+          {
+            "id": "tool-05",
+            "tool": "find_similar_tracks",
+            "arguments": {
+              "track_id": "e1c0468c81291ceb3d79",
+              "limit": 3,
+              "filters": null
+            },
+            "result_ok": true,
+            "summary": "找到 3 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "6d79b5100546acb24081",
+                "title": "Colorblind",
+                "bpm": 136.0,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "4c248475f2291cf589de",
+                "title": "Sideways",
+                "bpm": 143.6,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "99098c0f20a54163ef22",
+                "title": "Kids (with Miranda Glory)",
+                "bpm": 152.0,
+                "camelot_key": "8B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-06",
+            "tool": "find_similar_tracks",
+            "arguments": {
+              "track_id": "e1c0468c81291ceb3d79",
+              "limit": 5,
+              "filters": {
+                "bpm_min": 60,
+                "bpm_max": 220
+              }
+            },
+            "result_ok": true,
+            "summary": "找到 5 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "6d79b5100546acb24081",
+                "title": "Colorblind",
+                "bpm": 136.0,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "4c248475f2291cf589de",
+                "title": "Sideways",
+                "bpm": 143.6,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "99098c0f20a54163ef22",
+                "title": "Kids (with Miranda Glory)",
+                "bpm": 152.0,
+                "camelot_key": "8B"
+              },
+              {
+                "track_id": "be3a37ab0183c3969ec2",
+                "title": "What You Need",
+                "bpm": 136.0,
+                "camelot_key": "4B"
+              },
+              {
+                "track_id": "51be5299f3a44a67f8dd",
+                "title": "Silence",
+                "bpm": 143.6,
+                "camelot_key": "8A"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-07",
+            "tool": "generate_dj_set",
+            "arguments": {
+              "request": "quality eval round 3 build",
+              "duration_min": 10,
+              "bpm_min": 60,
+              "bpm_max": 220,
+              "energy_curve": "build",
+              "style_query": ""
+            },
+            "result_ok": true,
+            "summary": "已生成 2 首、约 9 分钟的 Set。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "bc432ebef3fa3c4af777",
+                "title": "Silent Skies",
+                "bpm": 136.0,
+                "camelot_key": "11A"
+              },
+              {
+                "track_id": "a722fbb037e89aecce9f",
+                "title": "Snowblind",
+                "bpm": 136.0,
+                "camelot_key": "11A"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-08",
+            "tool": "generate_dj_set",
+            "arguments": {
+              "request": "quality eval round 3 scoped",
+              "duration_min": 10,
+              "bpm_min": 60,
+              "bpm_max": 220,
+              "energy_curve": "steady",
+              "style_query": "",
+              "track_ids": [
+                "040d8aecd4b178302f91",
+                "c905b7a001da1a61945c",
+                "482792d0e401f7a09ea2",
+                "d92887a5d63be97e5351",
+                "252c1f7d28ed1ead6f0d",
+                "5e146bf976728898b357",
+                "7e3ac38d08fafc30b836",
+                "8be4e1da6336d64698a3",
+                "416b57d312cf3e3ecf16",
+                "668fc1ecb6b4b414c6c0",
+                "8e656e9bafae84ab376d",
+                "a8df75fc21f64d3dc7ea",
+                "bde89636f09f1ccb27ab",
+                "ca5015bf4301c9e18a0d",
+                "e1556d1e22847958ac6f",
+                "e6a6a00281a127875d96",
+                "43ab50199dc212585f04",
+                "39d806aa331d1ba936f8",
+                "7ab79c6cc8e754f9506b",
+                "816887e3f689b6883ca8"
+              ]
+            },
+            "result_ok": true,
+            "summary": "已生成 3 首、约 10 分钟的 Set。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "482792d0e401f7a09ea2",
+                "title": "Eyes Up",
+                "bpm": 95.7,
+                "camelot_key": "10B"
+              },
+              {
+                "track_id": "668fc1ecb6b4b414c6c0",
+                "title": "Don't Let Go",
+                "bpm": 103.4,
+                "camelot_key": "11B"
+              },
+              {
+                "track_id": "ca5015bf4301c9e18a0d",
+                "title": "Golden Hour (Chime Remix)",
+                "bpm": 107.7,
+                "camelot_key": "12B"
+              }
+            ],
+            "passed": true
+          }
+        ]
+      },
+      "rag": {
+        "accuracy_definition": "gold track returned in Top-3 for its indexed description",
+        "truthfulness_definition": "every returned evidence field exactly matches the project-scoped SQLite fact",
+        "hits_at_3": 5,
+        "queries": 5,
+        "accuracy_pct": 100.0,
+        "mrr_pct": 100.0,
+        "facts_verified": 180,
+        "facts_checked": 180,
+        "truthfulness_pct": 100.0,
+        "cases": [
+          {
+            "id": "rag-01",
+            "gold_track_id": "2b3a81f7fc99c3e611d7",
+            "gold_title": "First Place",
+            "query": "music audio; 143.6 BPM; key F# major; Camelot 2B; energy 0.85; spectral centroid 2464 Hz; onset strength 1.16",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "2b3a81f7fc99c3e611d7",
+                "title": "First Place",
+                "score": 0.999998,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "4c248475f2291cf589de",
+                "title": "Sideways",
+                "score": 0.959017,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "f0d7619d225bddd5f202",
+                "title": "Unsteady",
+                "score": 0.9406,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-02",
+            "gold_track_id": "2e5ebc468086620606dd",
+            "gold_title": "STYX HELIX (SprightS Remix)",
+            "query": "music audio; 143.6 BPM; key C# minor; Camelot 12A; energy 0.91; spectral centroid 2591 Hz; onset strength 1.28",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "2e5ebc468086620606dd",
+                "title": "STYX HELIX (SprightS Remix)",
+                "score": 0.999999,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "361778a26104302c6877",
+                "title": "Found Us (feat. Luma)",
+                "score": 0.966453,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "e8659088da83a9259fea",
+                "title": "Sherwood (2022)",
+                "score": 0.955588,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-03",
+            "gold_track_id": "34c8b8a65bb1649a3b93",
+            "gold_title": "Into Pieces (Wooli x Grabbitz Remix)",
+            "query": "music audio; 152.0 BPM; key B minor; Camelot 10A; energy 0.92; spectral centroid 2968 Hz; onset strength 1.16. Fast, high-energy B minor track with bright timbre and strong ons",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "34c8b8a65bb1649a3b93",
+                "title": "Into Pieces (Wooli x Grabbitz Remix)",
+                "score": 0.999999,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "723358e15ced6ba76711",
+                "title": "When I Fall",
+                "score": 0.946561,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "e8659088da83a9259fea",
+                "title": "Sherwood (2022)",
+                "score": 0.927809,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-04",
+            "gold_track_id": "361778a26104302c6877",
+            "gold_title": "Found Us (feat. Luma)",
+            "query": "music audio; 152.0 BPM; key C# minor; Camelot 12A; energy 0.84; spectral centroid 2503 Hz; onset strength 1.05",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "361778a26104302c6877",
+                "title": "Found Us (feat. Luma)",
+                "score": 0.999999,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "e8659088da83a9259fea",
+                "title": "Sherwood (2022)",
+                "score": 0.982468,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "2e5ebc468086620606dd",
+                "title": "STYX HELIX (SprightS Remix)",
+                "score": 0.966496,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-05",
+            "gold_track_id": "39672eae01e70dde11e6",
+            "gold_title": "Foolish Of Me (feat. Jonathan Mendelsohn)",
+            "query": "music audio; 123.0 BPM; key E minor; Camelot 9A; energy 0.91; spectral centroid 2813 Hz; onset strength 1.17",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "39672eae01e70dde11e6",
+                "title": "Foolish Of Me (feat. Jonathan Mendelsohn)",
+                "score": 0.999999,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "43ab50199dc212585f04",
+                "title": "Out of Frame",
+                "score": 0.970712,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "177a095610a89aa389bc",
+                "title": "Aeipathy",
+                "score": 0.959131,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          }
+        ]
+      }
+    },
+    {
+      "round": 4,
+      "started_at": "2026-09-12T13:18:32.440926+00:00",
+      "vector_audit": {
+        "imported_tracks": 275,
+        "sqlite_current_ready": 78,
+        "chroma_authorized_vectors": 78,
+        "valid_vectorized_tracks": 78,
+        "invalid_vectors": [],
+        "orphan_authorized_vectors": [],
+        "dimensions": 1024,
+        "model_key": "qwen3.7-text-embedding@api:dashscope-v1",
+        "integrity_rate_pct": 100.0
+      },
+      "intent": {
+        "passed": 21,
+        "total": 25,
+        "accuracy_pct": 84.0,
+        "macro_f1_pct": 84.84,
+        "per_class": {
+          "find_similar_tracks": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 60.0,
+            "f1_pct": 75.0
+          },
+          "generate_dj_set": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 100.0,
+            "f1_pct": 100.0
+          },
+          "music_chat": {
+            "support": 5,
+            "precision_pct": 55.56,
+            "recall_pct": 100.0,
+            "f1_pct": 71.43
+          },
+          "overstep": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 80.0,
+            "f1_pct": 88.89
+          },
+          "search_library": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 80.0,
+            "f1_pct": 88.89
+          }
+        },
+        "cases": [
+          {
+            "id": "search-01",
+            "text": "曲库里有哪些 120 到 128 BPM 的歌？",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-02",
+            "text": "帮我找歌，调性是 8A。",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-03",
+            "text": "Search my local library for high-energy tracks.",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-04",
+            "text": "搜索艺人 NURKO 的作品。",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-05",
+            "text": "我想看看本地收藏里速度适中的音乐。",
+            "expected": "search_library",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          },
+          {
+            "id": "similar-01",
+            "text": "找几首和这首相似的歌。",
+            "expected": "find_similar_tracks",
+            "actual": "find_similar_tracks",
+            "confidence": 0.9,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "similar-02",
+            "text": "这首后面下一首放什么？",
+            "expected": "find_similar_tracks",
+            "actual": "find_similar_tracks",
+            "confidence": 0.9,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "similar-03",
+            "text": "Find something that sounds like this track.",
+            "expected": "find_similar_tracks",
+            "actual": "find_similar_tracks",
+            "confidence": 0.9,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "similar-04",
+            "text": "这首适合接什么？",
+            "expected": "find_similar_tracks",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          },
+          {
+            "id": "similar-05",
+            "text": "以刚才那首为参考推荐几个替代曲目。",
+            "expected": "find_similar_tracks",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          },
+          {
+            "id": "set-01",
+            "text": "帮我编排一个 45 分钟的 DJ Set。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-02",
+            "text": "做一份逐步升温的歌单。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-03",
+            "text": "排歌：前半段平稳，后半段达到峰值。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-04",
+            "text": "给今晚的暖场安排 30 分钟音乐。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-05",
+            "text": "Create a one-hour set between 118 and 132 BPM.",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-01",
+            "text": "解释一下 Camelot wheel。",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-02",
+            "text": "侧链压缩在电子音乐里有什么作用？",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-03",
+            "text": "DJ 过渡时为什么要注意拍点？",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-04",
+            "text": "大调和小调听感上通常有什么区别？",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-05",
+            "text": "你好，聊聊音乐吧。",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.9,
+            "route_source": "ollama",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-01",
+            "text": "帮我写一段 Python 爬虫代码。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-02",
+            "text": "分析一下这只股票是否值得买。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-03",
+            "text": "总结今天最新政治新闻。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-04",
+            "text": "根据症状给我医疗诊断。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-05",
+            "text": "查一下 Spotify 实时排行榜。",
+            "expected": "overstep",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          }
+        ]
+      },
+      "tools": {
+        "passed": 8,
+        "total": 8,
+        "success_rate_pct": 100.0,
+        "cases": [
+          {
+            "id": "tool-01",
+            "tool": "search_library",
+            "arguments": {
+              "query": "",
+              "filters": {
+                "bpm_min": 120,
+                "bpm_max": 135
+              },
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 5 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "177a095610a89aa389bc",
+                "title": "Aeipathy",
+                "bpm": 129.2,
+                "camelot_key": "9A"
+              },
+              {
+                "track_id": "edda4e718b5cee4f9dc2",
+                "title": "Divinorum",
+                "bpm": 123.0,
+                "camelot_key": "5A"
+              },
+              {
+                "track_id": "7553a2ed6fb640ca2ca5",
+                "title": "Stardust (with HALIENE)",
+                "bpm": 129.2,
+                "camelot_key": "1A"
+              },
+              {
+                "track_id": "443a8954af142c909182",
+                "title": "Other Side",
+                "bpm": 129.2,
+                "camelot_key": "5B"
+              },
+              {
+                "track_id": "748a4934059d57903f44",
+                "title": "Not My Night",
+                "bpm": 129.2,
+                "camelot_key": "6B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-02",
+            "tool": "search_library",
+            "arguments": {
+              "query": "",
+              "filters": {
+                "title": "Last Wil"
+              },
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 1 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "e1c0468c81291ceb3d79",
+                "title": "Last Will (Rouno Remix)",
+                "bpm": 136.0,
+                "camelot_key": "8B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-03",
+            "tool": "search_library",
+            "arguments": {
+              "query": "high energy electronic music",
+              "filters": null,
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 5 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "db6ba9d2db26c346e1d5",
+                "title": "Reminder",
+                "bpm": 143.6,
+                "camelot_key": "5B"
+              },
+              {
+                "track_id": "e8659088da83a9259fea",
+                "title": "Sherwood (2022)",
+                "bpm": 152.0,
+                "camelot_key": "12A"
+              },
+              {
+                "track_id": "482792d0e401f7a09ea2",
+                "title": "Eyes Up",
+                "bpm": 95.7,
+                "camelot_key": "10B"
+              },
+              {
+                "track_id": "bc432ebef3fa3c4af777",
+                "title": "Silent Skies",
+                "bpm": 136.0,
+                "camelot_key": "11A"
+              },
+              {
+                "track_id": "7671b1cc8a0c8825db95",
+                "title": "Homura (Dabin Remix)",
+                "bpm": 152.0,
+                "camelot_key": "12B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-04",
+            "tool": "search_library",
+            "arguments": {
+              "query": "",
+              "filters": {
+                "title": "__dropit_eval_no_match__"
+              },
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 0 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [],
+            "passed": true
+          },
+          {
+            "id": "tool-05",
+            "tool": "find_similar_tracks",
+            "arguments": {
+              "track_id": "e1c0468c81291ceb3d79",
+              "limit": 3,
+              "filters": null
+            },
+            "result_ok": true,
+            "summary": "找到 3 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "6d79b5100546acb24081",
+                "title": "Colorblind",
+                "bpm": 136.0,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "4c248475f2291cf589de",
+                "title": "Sideways",
+                "bpm": 143.6,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "99098c0f20a54163ef22",
+                "title": "Kids (with Miranda Glory)",
+                "bpm": 152.0,
+                "camelot_key": "8B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-06",
+            "tool": "find_similar_tracks",
+            "arguments": {
+              "track_id": "e1c0468c81291ceb3d79",
+              "limit": 5,
+              "filters": {
+                "bpm_min": 60,
+                "bpm_max": 220
+              }
+            },
+            "result_ok": true,
+            "summary": "找到 5 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "6d79b5100546acb24081",
+                "title": "Colorblind",
+                "bpm": 136.0,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "4c248475f2291cf589de",
+                "title": "Sideways",
+                "bpm": 143.6,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "99098c0f20a54163ef22",
+                "title": "Kids (with Miranda Glory)",
+                "bpm": 152.0,
+                "camelot_key": "8B"
+              },
+              {
+                "track_id": "be3a37ab0183c3969ec2",
+                "title": "What You Need",
+                "bpm": 136.0,
+                "camelot_key": "4B"
+              },
+              {
+                "track_id": "51be5299f3a44a67f8dd",
+                "title": "Silence",
+                "bpm": 143.6,
+                "camelot_key": "8A"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-07",
+            "tool": "generate_dj_set",
+            "arguments": {
+              "request": "quality eval round 4 build",
+              "duration_min": 10,
+              "bpm_min": 60,
+              "bpm_max": 220,
+              "energy_curve": "build",
+              "style_query": ""
+            },
+            "result_ok": true,
+            "summary": "已生成 2 首、约 9 分钟的 Set。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "bc432ebef3fa3c4af777",
+                "title": "Silent Skies",
+                "bpm": 136.0,
+                "camelot_key": "11A"
+              },
+              {
+                "track_id": "a722fbb037e89aecce9f",
+                "title": "Snowblind",
+                "bpm": 136.0,
+                "camelot_key": "11A"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-08",
+            "tool": "generate_dj_set",
+            "arguments": {
+              "request": "quality eval round 4 scoped",
+              "duration_min": 10,
+              "bpm_min": 60,
+              "bpm_max": 220,
+              "energy_curve": "steady",
+              "style_query": "",
+              "track_ids": [
+                "040d8aecd4b178302f91",
+                "c905b7a001da1a61945c",
+                "482792d0e401f7a09ea2",
+                "d92887a5d63be97e5351",
+                "252c1f7d28ed1ead6f0d",
+                "5e146bf976728898b357",
+                "7e3ac38d08fafc30b836",
+                "8be4e1da6336d64698a3",
+                "416b57d312cf3e3ecf16",
+                "668fc1ecb6b4b414c6c0",
+                "8e656e9bafae84ab376d",
+                "a8df75fc21f64d3dc7ea",
+                "bde89636f09f1ccb27ab",
+                "ca5015bf4301c9e18a0d",
+                "e1556d1e22847958ac6f",
+                "e6a6a00281a127875d96",
+                "43ab50199dc212585f04",
+                "39d806aa331d1ba936f8",
+                "7ab79c6cc8e754f9506b",
+                "816887e3f689b6883ca8"
+              ]
+            },
+            "result_ok": true,
+            "summary": "已生成 3 首、约 10 分钟的 Set。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "482792d0e401f7a09ea2",
+                "title": "Eyes Up",
+                "bpm": 95.7,
+                "camelot_key": "10B"
+              },
+              {
+                "track_id": "668fc1ecb6b4b414c6c0",
+                "title": "Don't Let Go",
+                "bpm": 103.4,
+                "camelot_key": "11B"
+              },
+              {
+                "track_id": "ca5015bf4301c9e18a0d",
+                "title": "Golden Hour (Chime Remix)",
+                "bpm": 107.7,
+                "camelot_key": "12B"
+              }
+            ],
+            "passed": true
+          }
+        ]
+      },
+      "rag": {
+        "accuracy_definition": "gold track returned in Top-3 for its indexed description",
+        "truthfulness_definition": "every returned evidence field exactly matches the project-scoped SQLite fact",
+        "hits_at_3": 5,
+        "queries": 5,
+        "accuracy_pct": 100.0,
+        "mrr_pct": 100.0,
+        "facts_verified": 180,
+        "facts_checked": 180,
+        "truthfulness_pct": 100.0,
+        "cases": [
+          {
+            "id": "rag-01",
+            "gold_track_id": "39d806aa331d1ba936f8",
+            "gold_title": "Cursed",
+            "query": "music audio; 117.5 BPM; key G minor; Camelot 6A; energy 0.72; spectral centroid 2225 Hz; onset strength 0.92",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "39d806aa331d1ba936f8",
+                "title": "Cursed",
+                "score": 1.0,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "015c9014efbd753ee838",
+                "title": "Light In The Dark",
+                "score": 0.956006,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "76c29652ff3a281229fe",
+                "title": "Tomorrow",
+                "score": 0.952533,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-02",
+            "gold_track_id": "3e4d8f1fe1f432b58b17",
+            "gold_title": "Leave The Light On",
+            "query": "music audio; 152.0 BPM; key E minor; Camelot 9A; energy 0.88; spectral centroid 2771 Hz; onset strength 1.03",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "3e4d8f1fe1f432b58b17",
+                "title": "Leave The Light On",
+                "score": 0.999999,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "0d96d1ecce8e1483e9f5",
+                "title": "WARP DRIVE",
+                "score": 0.998434,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "177a095610a89aa389bc",
+                "title": "Aeipathy",
+                "score": 0.965469,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-03",
+            "gold_track_id": "416b57d312cf3e3ecf16",
+            "gold_title": "Moon Climber",
+            "query": "music audio; 103.4 BPM; key E minor; Camelot 9A; energy 0.92; spectral centroid 2737 Hz; onset strength 1.22",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "416b57d312cf3e3ecf16",
+                "title": "Moon Climber",
+                "score": 0.999999,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "39672eae01e70dde11e6",
+                "title": "Foolish Of Me (feat. Jonathan Mendelsohn)",
+                "score": 0.945313,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "3e4d8f1fe1f432b58b17",
+                "title": "Leave The Light On",
+                "score": 0.938063,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-04",
+            "gold_track_id": "43ab50199dc212585f04",
+            "gold_title": "Out of Frame",
+            "query": "music audio; 112.3 BPM; key E minor; Camelot 9A; energy 0.96; spectral centroid 3000 Hz; onset strength 1.21",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "43ab50199dc212585f04",
+                "title": "Out of Frame",
+                "score": 1.0,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "39672eae01e70dde11e6",
+                "title": "Foolish Of Me (feat. Jonathan Mendelsohn)",
+                "score": 0.970671,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "177a095610a89aa389bc",
+                "title": "Aeipathy",
+                "score": 0.952743,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-05",
+            "gold_track_id": "443a8954af142c909182",
+            "gold_title": "Other Side",
+            "query": "music audio; 129.2 BPM; key D# major; Camelot 5B; energy 0.83; spectral centroid 2509 Hz; onset strength 1.19",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "443a8954af142c909182",
+                "title": "Other Side",
+                "score": 0.999999,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "979cf7b5029f3aa23b9a",
+                "title": "See You Again",
+                "score": 0.965918,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "2217e111d603e8ac0a38",
+                "title": "Butterflies (feat. Dia Frampton)",
+                "score": 0.957956,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          }
+        ]
+      }
+    },
+    {
+      "round": 5,
+      "started_at": "2026-09-12T13:19:32.166911+00:00",
+      "vector_audit": {
+        "imported_tracks": 275,
+        "sqlite_current_ready": 78,
+        "chroma_authorized_vectors": 78,
+        "valid_vectorized_tracks": 78,
+        "invalid_vectors": [],
+        "orphan_authorized_vectors": [],
+        "dimensions": 1024,
+        "model_key": "qwen3.7-text-embedding@api:dashscope-v1",
+        "integrity_rate_pct": 100.0
+      },
+      "intent": {
+        "passed": 21,
+        "total": 25,
+        "accuracy_pct": 84.0,
+        "macro_f1_pct": 84.84,
+        "per_class": {
+          "find_similar_tracks": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 60.0,
+            "f1_pct": 75.0
+          },
+          "generate_dj_set": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 100.0,
+            "f1_pct": 100.0
+          },
+          "music_chat": {
+            "support": 5,
+            "precision_pct": 55.56,
+            "recall_pct": 100.0,
+            "f1_pct": 71.43
+          },
+          "overstep": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 80.0,
+            "f1_pct": 88.89
+          },
+          "search_library": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 80.0,
+            "f1_pct": 88.89
+          }
+        },
+        "cases": [
+          {
+            "id": "search-01",
+            "text": "曲库里有哪些 120 到 128 BPM 的歌？",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-02",
+            "text": "帮我找歌，调性是 8A。",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-03",
+            "text": "Search my local library for high-energy tracks.",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-04",
+            "text": "搜索艺人 NURKO 的作品。",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-05",
+            "text": "我想看看本地收藏里速度适中的音乐。",
+            "expected": "search_library",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          },
+          {
+            "id": "similar-01",
+            "text": "找几首和这首相似的歌。",
+            "expected": "find_similar_tracks",
+            "actual": "find_similar_tracks",
+            "confidence": 0.9,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "similar-02",
+            "text": "这首后面下一首放什么？",
+            "expected": "find_similar_tracks",
+            "actual": "find_similar_tracks",
+            "confidence": 0.9,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "similar-03",
+            "text": "Find something that sounds like this track.",
+            "expected": "find_similar_tracks",
+            "actual": "find_similar_tracks",
+            "confidence": 0.9,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "similar-04",
+            "text": "这首适合接什么？",
+            "expected": "find_similar_tracks",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          },
+          {
+            "id": "similar-05",
+            "text": "以刚才那首为参考推荐几个替代曲目。",
+            "expected": "find_similar_tracks",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          },
+          {
+            "id": "set-01",
+            "text": "帮我编排一个 45 分钟的 DJ Set。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-02",
+            "text": "做一份逐步升温的歌单。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-03",
+            "text": "排歌：前半段平稳，后半段达到峰值。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-04",
+            "text": "给今晚的暖场安排 30 分钟音乐。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-05",
+            "text": "Create a one-hour set between 118 and 132 BPM.",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-01",
+            "text": "解释一下 Camelot wheel。",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-02",
+            "text": "侧链压缩在电子音乐里有什么作用？",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-03",
+            "text": "DJ 过渡时为什么要注意拍点？",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-04",
+            "text": "大调和小调听感上通常有什么区别？",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-05",
+            "text": "你好，聊聊音乐吧。",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.9,
+            "route_source": "ollama",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-01",
+            "text": "帮我写一段 Python 爬虫代码。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-02",
+            "text": "分析一下这只股票是否值得买。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-03",
+            "text": "总结今天最新政治新闻。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-04",
+            "text": "根据症状给我医疗诊断。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-05",
+            "text": "查一下 Spotify 实时排行榜。",
+            "expected": "overstep",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          }
+        ]
+      },
+      "tools": {
+        "passed": 8,
+        "total": 8,
+        "success_rate_pct": 100.0,
+        "cases": [
+          {
+            "id": "tool-01",
+            "tool": "search_library",
+            "arguments": {
+              "query": "",
+              "filters": {
+                "bpm_min": 120,
+                "bpm_max": 135
+              },
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 5 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "177a095610a89aa389bc",
+                "title": "Aeipathy",
+                "bpm": 129.2,
+                "camelot_key": "9A"
+              },
+              {
+                "track_id": "edda4e718b5cee4f9dc2",
+                "title": "Divinorum",
+                "bpm": 123.0,
+                "camelot_key": "5A"
+              },
+              {
+                "track_id": "7553a2ed6fb640ca2ca5",
+                "title": "Stardust (with HALIENE)",
+                "bpm": 129.2,
+                "camelot_key": "1A"
+              },
+              {
+                "track_id": "443a8954af142c909182",
+                "title": "Other Side",
+                "bpm": 129.2,
+                "camelot_key": "5B"
+              },
+              {
+                "track_id": "748a4934059d57903f44",
+                "title": "Not My Night",
+                "bpm": 129.2,
+                "camelot_key": "6B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-02",
+            "tool": "search_library",
+            "arguments": {
+              "query": "",
+              "filters": {
+                "title": "Last Wil"
+              },
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 1 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "e1c0468c81291ceb3d79",
+                "title": "Last Will (Rouno Remix)",
+                "bpm": 136.0,
+                "camelot_key": "8B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-03",
+            "tool": "search_library",
+            "arguments": {
+              "query": "high energy electronic music",
+              "filters": null,
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 5 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "db6ba9d2db26c346e1d5",
+                "title": "Reminder",
+                "bpm": 143.6,
+                "camelot_key": "5B"
+              },
+              {
+                "track_id": "e8659088da83a9259fea",
+                "title": "Sherwood (2022)",
+                "bpm": 152.0,
+                "camelot_key": "12A"
+              },
+              {
+                "track_id": "482792d0e401f7a09ea2",
+                "title": "Eyes Up",
+                "bpm": 95.7,
+                "camelot_key": "10B"
+              },
+              {
+                "track_id": "bc432ebef3fa3c4af777",
+                "title": "Silent Skies",
+                "bpm": 136.0,
+                "camelot_key": "11A"
+              },
+              {
+                "track_id": "7671b1cc8a0c8825db95",
+                "title": "Homura (Dabin Remix)",
+                "bpm": 152.0,
+                "camelot_key": "12B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-04",
+            "tool": "search_library",
+            "arguments": {
+              "query": "",
+              "filters": {
+                "title": "__dropit_eval_no_match__"
+              },
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 0 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [],
+            "passed": true
+          },
+          {
+            "id": "tool-05",
+            "tool": "find_similar_tracks",
+            "arguments": {
+              "track_id": "e1c0468c81291ceb3d79",
+              "limit": 3,
+              "filters": null
+            },
+            "result_ok": true,
+            "summary": "找到 3 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "6d79b5100546acb24081",
+                "title": "Colorblind",
+                "bpm": 136.0,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "4c248475f2291cf589de",
+                "title": "Sideways",
+                "bpm": 143.6,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "99098c0f20a54163ef22",
+                "title": "Kids (with Miranda Glory)",
+                "bpm": 152.0,
+                "camelot_key": "8B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-06",
+            "tool": "find_similar_tracks",
+            "arguments": {
+              "track_id": "e1c0468c81291ceb3d79",
+              "limit": 5,
+              "filters": {
+                "bpm_min": 60,
+                "bpm_max": 220
+              }
+            },
+            "result_ok": true,
+            "summary": "找到 5 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "6d79b5100546acb24081",
+                "title": "Colorblind",
+                "bpm": 136.0,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "4c248475f2291cf589de",
+                "title": "Sideways",
+                "bpm": 143.6,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "99098c0f20a54163ef22",
+                "title": "Kids (with Miranda Glory)",
+                "bpm": 152.0,
+                "camelot_key": "8B"
+              },
+              {
+                "track_id": "be3a37ab0183c3969ec2",
+                "title": "What You Need",
+                "bpm": 136.0,
+                "camelot_key": "4B"
+              },
+              {
+                "track_id": "51be5299f3a44a67f8dd",
+                "title": "Silence",
+                "bpm": 143.6,
+                "camelot_key": "8A"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-07",
+            "tool": "generate_dj_set",
+            "arguments": {
+              "request": "quality eval round 5 build",
+              "duration_min": 10,
+              "bpm_min": 60,
+              "bpm_max": 220,
+              "energy_curve": "build",
+              "style_query": ""
+            },
+            "result_ok": true,
+            "summary": "已生成 2 首、约 9 分钟的 Set。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "bc432ebef3fa3c4af777",
+                "title": "Silent Skies",
+                "bpm": 136.0,
+                "camelot_key": "11A"
+              },
+              {
+                "track_id": "a722fbb037e89aecce9f",
+                "title": "Snowblind",
+                "bpm": 136.0,
+                "camelot_key": "11A"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-08",
+            "tool": "generate_dj_set",
+            "arguments": {
+              "request": "quality eval round 5 scoped",
+              "duration_min": 10,
+              "bpm_min": 60,
+              "bpm_max": 220,
+              "energy_curve": "steady",
+              "style_query": "",
+              "track_ids": [
+                "040d8aecd4b178302f91",
+                "c905b7a001da1a61945c",
+                "482792d0e401f7a09ea2",
+                "d92887a5d63be97e5351",
+                "252c1f7d28ed1ead6f0d",
+                "5e146bf976728898b357",
+                "7e3ac38d08fafc30b836",
+                "8be4e1da6336d64698a3",
+                "416b57d312cf3e3ecf16",
+                "668fc1ecb6b4b414c6c0",
+                "8e656e9bafae84ab376d",
+                "a8df75fc21f64d3dc7ea",
+                "bde89636f09f1ccb27ab",
+                "ca5015bf4301c9e18a0d",
+                "e1556d1e22847958ac6f",
+                "e6a6a00281a127875d96",
+                "43ab50199dc212585f04",
+                "39d806aa331d1ba936f8",
+                "7ab79c6cc8e754f9506b",
+                "816887e3f689b6883ca8"
+              ]
+            },
+            "result_ok": true,
+            "summary": "已生成 3 首、约 10 分钟的 Set。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "482792d0e401f7a09ea2",
+                "title": "Eyes Up",
+                "bpm": 95.7,
+                "camelot_key": "10B"
+              },
+              {
+                "track_id": "668fc1ecb6b4b414c6c0",
+                "title": "Don't Let Go",
+                "bpm": 103.4,
+                "camelot_key": "11B"
+              },
+              {
+                "track_id": "ca5015bf4301c9e18a0d",
+                "title": "Golden Hour (Chime Remix)",
+                "bpm": 107.7,
+                "camelot_key": "12B"
+              }
+            ],
+            "passed": true
+          }
+        ]
+      },
+      "rag": {
+        "accuracy_definition": "gold track returned in Top-3 for its indexed description",
+        "truthfulness_definition": "every returned evidence field exactly matches the project-scoped SQLite fact",
+        "hits_at_3": 5,
+        "queries": 5,
+        "accuracy_pct": 100.0,
+        "mrr_pct": 100.0,
+        "facts_verified": 180,
+        "facts_checked": 180,
+        "truthfulness_pct": 100.0,
+        "cases": [
+          {
+            "id": "rag-01",
+            "gold_track_id": "482792d0e401f7a09ea2",
+            "gold_title": "Eyes Up",
+            "query": "music audio; 95.7 BPM; key D major; Camelot 10B; energy 0.88; spectral centroid 2507 Hz; onset strength 1.14. High-energy D major audio at 95",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "482792d0e401f7a09ea2",
+                "title": "Eyes Up",
+                "score": 1.0,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "816887e3f689b6883ca8",
+                "title": "Otherside",
+                "score": 0.95573,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "7ab79c6cc8e754f9506b",
+                "title": "Homesick (feat. SOUNDR)",
+                "score": 0.950492,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-02",
+            "gold_track_id": "4c248475f2291cf589de",
+            "gold_title": "Sideways",
+            "query": "music audio; 143.6 BPM; key F major; Camelot 7B; energy 0.91; spectral centroid 2637 Hz; onset strength 1.18",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "4c248475f2291cf589de",
+                "title": "Sideways",
+                "score": 0.999999,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "6d79b5100546acb24081",
+                "title": "Colorblind",
+                "score": 0.976633,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "76a5d9ede6e87728ceb5",
+                "title": "Good News (feat. Kyle Reynolds)",
+                "score": 0.971112,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-03",
+            "gold_track_id": "4c8adac455c708c42e3b",
+            "gold_title": "Space Between",
+            "query": "music audio; 152.0 BPM; key F minor; Camelot 4A; energy 0.95; spectral centroid 2613 Hz; onset strength 1.23",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "4c8adac455c708c42e3b",
+                "title": "Space Between",
+                "score": 0.999999,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "13b033711643e23b252a",
+                "title": "Grand Escape (Teminite Remix)",
+                "score": 0.958971,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "f05ffc619aa4e290088e",
+                "title": "夜月花江春 Moonlit Night (Salty Salt Remix)",
+                "score": 0.945661,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-04",
+            "gold_track_id": "51be5299f3a44a67f8dd",
+            "gold_title": "Silence",
+            "query": "music audio; 143.6 BPM; key A minor; Camelot 8A; energy 0.90; spectral centroid 2880 Hz; onset strength 1.10",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "51be5299f3a44a67f8dd",
+                "title": "Silence",
+                "score": 0.999999,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "9ad44931441e2a1c10d2",
+                "title": "Let You Go",
+                "score": 0.997445,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "015c9014efbd753ee838",
+                "title": "Light In The Dark",
+                "score": 0.935548,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-05",
+            "gold_track_id": "52f65c34ed3a26638869",
+            "gold_title": "Starblossom (feat. Kasane Teto)",
+            "query": "music audio; 143.6 BPM; key A major; Camelot 11B; energy 0.88; spectral centroid 3001 Hz; onset strength 1.30",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "52f65c34ed3a26638869",
+                "title": "Starblossom (feat. Kasane Teto)",
+                "score": 1.0,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "f95ec5ec42c3fc968f46",
+                "title": "Moment With You (feat. PRXZM)",
+                "score": 0.968861,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "668fc1ecb6b4b414c6c0",
+                "title": "Don't Let Go",
+                "score": 0.964742,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          }
+        ]
+      }
+    },
+    {
+      "round": 6,
+      "started_at": "2026-09-12T13:20:28.402828+00:00",
+      "vector_audit": {
+        "imported_tracks": 275,
+        "sqlite_current_ready": 78,
+        "chroma_authorized_vectors": 78,
+        "valid_vectorized_tracks": 78,
+        "invalid_vectors": [],
+        "orphan_authorized_vectors": [],
+        "dimensions": 1024,
+        "model_key": "qwen3.7-text-embedding@api:dashscope-v1",
+        "integrity_rate_pct": 100.0
+      },
+      "intent": {
+        "passed": 21,
+        "total": 25,
+        "accuracy_pct": 84.0,
+        "macro_f1_pct": 84.84,
+        "per_class": {
+          "find_similar_tracks": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 60.0,
+            "f1_pct": 75.0
+          },
+          "generate_dj_set": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 100.0,
+            "f1_pct": 100.0
+          },
+          "music_chat": {
+            "support": 5,
+            "precision_pct": 55.56,
+            "recall_pct": 100.0,
+            "f1_pct": 71.43
+          },
+          "overstep": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 80.0,
+            "f1_pct": 88.89
+          },
+          "search_library": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 80.0,
+            "f1_pct": 88.89
+          }
+        },
+        "cases": [
+          {
+            "id": "search-01",
+            "text": "曲库里有哪些 120 到 128 BPM 的歌？",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-02",
+            "text": "帮我找歌，调性是 8A。",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-03",
+            "text": "Search my local library for high-energy tracks.",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-04",
+            "text": "搜索艺人 NURKO 的作品。",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-05",
+            "text": "我想看看本地收藏里速度适中的音乐。",
+            "expected": "search_library",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          },
+          {
+            "id": "similar-01",
+            "text": "找几首和这首相似的歌。",
+            "expected": "find_similar_tracks",
+            "actual": "find_similar_tracks",
+            "confidence": 0.9,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "similar-02",
+            "text": "这首后面下一首放什么？",
+            "expected": "find_similar_tracks",
+            "actual": "find_similar_tracks",
+            "confidence": 0.9,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "similar-03",
+            "text": "Find something that sounds like this track.",
+            "expected": "find_similar_tracks",
+            "actual": "find_similar_tracks",
+            "confidence": 0.9,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "similar-04",
+            "text": "这首适合接什么？",
+            "expected": "find_similar_tracks",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          },
+          {
+            "id": "similar-05",
+            "text": "以刚才那首为参考推荐几个替代曲目。",
+            "expected": "find_similar_tracks",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          },
+          {
+            "id": "set-01",
+            "text": "帮我编排一个 45 分钟的 DJ Set。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-02",
+            "text": "做一份逐步升温的歌单。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-03",
+            "text": "排歌：前半段平稳，后半段达到峰值。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-04",
+            "text": "给今晚的暖场安排 30 分钟音乐。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-05",
+            "text": "Create a one-hour set between 118 and 132 BPM.",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-01",
+            "text": "解释一下 Camelot wheel。",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-02",
+            "text": "侧链压缩在电子音乐里有什么作用？",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-03",
+            "text": "DJ 过渡时为什么要注意拍点？",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-04",
+            "text": "大调和小调听感上通常有什么区别？",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-05",
+            "text": "你好，聊聊音乐吧。",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.9,
+            "route_source": "ollama",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-01",
+            "text": "帮我写一段 Python 爬虫代码。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-02",
+            "text": "分析一下这只股票是否值得买。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-03",
+            "text": "总结今天最新政治新闻。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-04",
+            "text": "根据症状给我医疗诊断。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-05",
+            "text": "查一下 Spotify 实时排行榜。",
+            "expected": "overstep",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          }
+        ]
+      },
+      "tools": {
+        "passed": 8,
+        "total": 8,
+        "success_rate_pct": 100.0,
+        "cases": [
+          {
+            "id": "tool-01",
+            "tool": "search_library",
+            "arguments": {
+              "query": "",
+              "filters": {
+                "bpm_min": 120,
+                "bpm_max": 135
+              },
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 5 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "177a095610a89aa389bc",
+                "title": "Aeipathy",
+                "bpm": 129.2,
+                "camelot_key": "9A"
+              },
+              {
+                "track_id": "edda4e718b5cee4f9dc2",
+                "title": "Divinorum",
+                "bpm": 123.0,
+                "camelot_key": "5A"
+              },
+              {
+                "track_id": "7553a2ed6fb640ca2ca5",
+                "title": "Stardust (with HALIENE)",
+                "bpm": 129.2,
+                "camelot_key": "1A"
+              },
+              {
+                "track_id": "443a8954af142c909182",
+                "title": "Other Side",
+                "bpm": 129.2,
+                "camelot_key": "5B"
+              },
+              {
+                "track_id": "748a4934059d57903f44",
+                "title": "Not My Night",
+                "bpm": 129.2,
+                "camelot_key": "6B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-02",
+            "tool": "search_library",
+            "arguments": {
+              "query": "",
+              "filters": {
+                "title": "Last Wil"
+              },
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 1 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "e1c0468c81291ceb3d79",
+                "title": "Last Will (Rouno Remix)",
+                "bpm": 136.0,
+                "camelot_key": "8B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-03",
+            "tool": "search_library",
+            "arguments": {
+              "query": "high energy electronic music",
+              "filters": null,
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 5 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "db6ba9d2db26c346e1d5",
+                "title": "Reminder",
+                "bpm": 143.6,
+                "camelot_key": "5B"
+              },
+              {
+                "track_id": "e8659088da83a9259fea",
+                "title": "Sherwood (2022)",
+                "bpm": 152.0,
+                "camelot_key": "12A"
+              },
+              {
+                "track_id": "482792d0e401f7a09ea2",
+                "title": "Eyes Up",
+                "bpm": 95.7,
+                "camelot_key": "10B"
+              },
+              {
+                "track_id": "bc432ebef3fa3c4af777",
+                "title": "Silent Skies",
+                "bpm": 136.0,
+                "camelot_key": "11A"
+              },
+              {
+                "track_id": "7671b1cc8a0c8825db95",
+                "title": "Homura (Dabin Remix)",
+                "bpm": 152.0,
+                "camelot_key": "12B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-04",
+            "tool": "search_library",
+            "arguments": {
+              "query": "",
+              "filters": {
+                "title": "__dropit_eval_no_match__"
+              },
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 0 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [],
+            "passed": true
+          },
+          {
+            "id": "tool-05",
+            "tool": "find_similar_tracks",
+            "arguments": {
+              "track_id": "e1c0468c81291ceb3d79",
+              "limit": 3,
+              "filters": null
+            },
+            "result_ok": true,
+            "summary": "找到 3 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "6d79b5100546acb24081",
+                "title": "Colorblind",
+                "bpm": 136.0,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "4c248475f2291cf589de",
+                "title": "Sideways",
+                "bpm": 143.6,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "99098c0f20a54163ef22",
+                "title": "Kids (with Miranda Glory)",
+                "bpm": 152.0,
+                "camelot_key": "8B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-06",
+            "tool": "find_similar_tracks",
+            "arguments": {
+              "track_id": "e1c0468c81291ceb3d79",
+              "limit": 5,
+              "filters": {
+                "bpm_min": 60,
+                "bpm_max": 220
+              }
+            },
+            "result_ok": true,
+            "summary": "找到 5 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "6d79b5100546acb24081",
+                "title": "Colorblind",
+                "bpm": 136.0,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "4c248475f2291cf589de",
+                "title": "Sideways",
+                "bpm": 143.6,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "99098c0f20a54163ef22",
+                "title": "Kids (with Miranda Glory)",
+                "bpm": 152.0,
+                "camelot_key": "8B"
+              },
+              {
+                "track_id": "be3a37ab0183c3969ec2",
+                "title": "What You Need",
+                "bpm": 136.0,
+                "camelot_key": "4B"
+              },
+              {
+                "track_id": "51be5299f3a44a67f8dd",
+                "title": "Silence",
+                "bpm": 143.6,
+                "camelot_key": "8A"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-07",
+            "tool": "generate_dj_set",
+            "arguments": {
+              "request": "quality eval round 6 build",
+              "duration_min": 10,
+              "bpm_min": 60,
+              "bpm_max": 220,
+              "energy_curve": "build",
+              "style_query": ""
+            },
+            "result_ok": true,
+            "summary": "已生成 2 首、约 9 分钟的 Set。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "bc432ebef3fa3c4af777",
+                "title": "Silent Skies",
+                "bpm": 136.0,
+                "camelot_key": "11A"
+              },
+              {
+                "track_id": "a722fbb037e89aecce9f",
+                "title": "Snowblind",
+                "bpm": 136.0,
+                "camelot_key": "11A"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-08",
+            "tool": "generate_dj_set",
+            "arguments": {
+              "request": "quality eval round 6 scoped",
+              "duration_min": 10,
+              "bpm_min": 60,
+              "bpm_max": 220,
+              "energy_curve": "steady",
+              "style_query": "",
+              "track_ids": [
+                "040d8aecd4b178302f91",
+                "c905b7a001da1a61945c",
+                "482792d0e401f7a09ea2",
+                "d92887a5d63be97e5351",
+                "252c1f7d28ed1ead6f0d",
+                "5e146bf976728898b357",
+                "7e3ac38d08fafc30b836",
+                "8be4e1da6336d64698a3",
+                "416b57d312cf3e3ecf16",
+                "668fc1ecb6b4b414c6c0",
+                "8e656e9bafae84ab376d",
+                "a8df75fc21f64d3dc7ea",
+                "bde89636f09f1ccb27ab",
+                "ca5015bf4301c9e18a0d",
+                "e1556d1e22847958ac6f",
+                "e6a6a00281a127875d96",
+                "43ab50199dc212585f04",
+                "39d806aa331d1ba936f8",
+                "7ab79c6cc8e754f9506b",
+                "816887e3f689b6883ca8"
+              ]
+            },
+            "result_ok": true,
+            "summary": "已生成 3 首、约 10 分钟的 Set。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "482792d0e401f7a09ea2",
+                "title": "Eyes Up",
+                "bpm": 95.7,
+                "camelot_key": "10B"
+              },
+              {
+                "track_id": "668fc1ecb6b4b414c6c0",
+                "title": "Don't Let Go",
+                "bpm": 103.4,
+                "camelot_key": "11B"
+              },
+              {
+                "track_id": "ca5015bf4301c9e18a0d",
+                "title": "Golden Hour (Chime Remix)",
+                "bpm": 107.7,
+                "camelot_key": "12B"
+              }
+            ],
+            "passed": true
+          }
+        ]
+      },
+      "rag": {
+        "accuracy_definition": "gold track returned in Top-3 for its indexed description",
+        "truthfulness_definition": "every returned evidence field exactly matches the project-scoped SQLite fact",
+        "hits_at_3": 5,
+        "queries": 5,
+        "accuracy_pct": 100.0,
+        "mrr_pct": 100.0,
+        "facts_verified": 180,
+        "facts_checked": 180,
+        "truthfulness_pct": 100.0,
+        "cases": [
+          {
+            "id": "rag-01",
+            "gold_track_id": "5e146bf976728898b357",
+            "gold_title": "Electric Lady (feat. XO ELIZA)",
+            "query": "music audio; 99.4 BPM; key D# minor; Camelot 2A; energy 0.89; spectral centroid 2109 Hz; onset strength 1.17",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "5e146bf976728898b357",
+                "title": "Electric Lady (feat. XO ELIZA)",
+                "score": 0.999999,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "252c1f7d28ed1ead6f0d",
+                "title": "Hurt (feat. Zack Gray)",
+                "score": 0.999046,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "ca46c7b616b9f15483cc",
+                "title": "2024 ID Showcase",
+                "score": 0.953053,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-02",
+            "gold_track_id": "60e8f59948fa481ec33e",
+            "gold_title": "More Than I Can Say",
+            "query": "music audio; 143.6 BPM; key D major; Camelot 10B; energy 0.89; spectral centroid 2871 Hz; onset strength 1.15",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "60e8f59948fa481ec33e",
+                "title": "More Than I Can Say",
+                "score": 1.0,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "040d8aecd4b178302f91",
+                "title": "Ones I Used To Love",
+                "score": 0.979276,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "fcabeba43498d5f74973",
+                "title": "Take Me Home（Ft.Ella）",
+                "score": 0.969544,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-03",
+            "gold_track_id": "668fc1ecb6b4b414c6c0",
+            "gold_title": "Don't Let Go",
+            "query": "music audio; 103.4 BPM; key A major; Camelot 11B; energy 0.84; spectral centroid 2370 Hz; onset strength 1.02",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "668fc1ecb6b4b414c6c0",
+                "title": "Don't Let Go",
+                "score": 0.999999,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "52f65c34ed3a26638869",
+                "title": "Starblossom (feat. Kasane Teto)",
+                "score": 0.964767,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "f95ec5ec42c3fc968f46",
+                "title": "Moment With You (feat. PRXZM)",
+                "score": 0.943913,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-04",
+            "gold_track_id": "6bef67c05d2cc20f0197",
+            "gold_title": "Walk On Water (Wooli & Trivecta Remix)",
+            "query": "music audio; 143.6 BPM; key G# major; Camelot 4B; energy 0.95; spectral centroid 2814 Hz; onset strength 1.05",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "6bef67c05d2cc20f0197",
+                "title": "Walk On Water (Wooli & Trivecta Remix)",
+                "score": 0.999999,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "be3a37ab0183c3969ec2",
+                "title": "What You Need",
+                "score": 0.975434,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "ded2972db640277f8514",
+                "title": "Going Down",
+                "score": 0.968413,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-05",
+            "gold_track_id": "6c054ba6e542f9d4ba60",
+            "gold_title": "Pixie",
+            "query": "music audio; 129.2 BPM; key D# minor; Camelot 2A; energy 0.89; spectral centroid 2596 Hz; onset strength 1.19",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "6c054ba6e542f9d4ba60",
+                "title": "Pixie",
+                "score": 0.999999,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "ca46c7b616b9f15483cc",
+                "title": "2024 ID Showcase",
+                "score": 0.954214,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "5e146bf976728898b357",
+                "title": "Electric Lady (feat. XO ELIZA)",
+                "score": 0.949008,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          }
+        ]
+      }
+    },
+    {
+      "round": 7,
+      "started_at": "2026-09-12T13:21:22.100677+00:00",
+      "vector_audit": {
+        "imported_tracks": 275,
+        "sqlite_current_ready": 78,
+        "chroma_authorized_vectors": 78,
+        "valid_vectorized_tracks": 78,
+        "invalid_vectors": [],
+        "orphan_authorized_vectors": [],
+        "dimensions": 1024,
+        "model_key": "qwen3.7-text-embedding@api:dashscope-v1",
+        "integrity_rate_pct": 100.0
+      },
+      "intent": {
+        "passed": 21,
+        "total": 25,
+        "accuracy_pct": 84.0,
+        "macro_f1_pct": 84.84,
+        "per_class": {
+          "find_similar_tracks": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 60.0,
+            "f1_pct": 75.0
+          },
+          "generate_dj_set": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 100.0,
+            "f1_pct": 100.0
+          },
+          "music_chat": {
+            "support": 5,
+            "precision_pct": 55.56,
+            "recall_pct": 100.0,
+            "f1_pct": 71.43
+          },
+          "overstep": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 80.0,
+            "f1_pct": 88.89
+          },
+          "search_library": {
+            "support": 5,
+            "precision_pct": 100.0,
+            "recall_pct": 80.0,
+            "f1_pct": 88.89
+          }
+        },
+        "cases": [
+          {
+            "id": "search-01",
+            "text": "曲库里有哪些 120 到 128 BPM 的歌？",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-02",
+            "text": "帮我找歌，调性是 8A。",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-03",
+            "text": "Search my local library for high-energy tracks.",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-04",
+            "text": "搜索艺人 NURKO 的作品。",
+            "expected": "search_library",
+            "actual": "search_library",
+            "confidence": 0.86,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "search-05",
+            "text": "我想看看本地收藏里速度适中的音乐。",
+            "expected": "search_library",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          },
+          {
+            "id": "similar-01",
+            "text": "找几首和这首相似的歌。",
+            "expected": "find_similar_tracks",
+            "actual": "find_similar_tracks",
+            "confidence": 0.9,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "similar-02",
+            "text": "这首后面下一首放什么？",
+            "expected": "find_similar_tracks",
+            "actual": "find_similar_tracks",
+            "confidence": 0.9,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "similar-03",
+            "text": "Find something that sounds like this track.",
+            "expected": "find_similar_tracks",
+            "actual": "find_similar_tracks",
+            "confidence": 0.9,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "similar-04",
+            "text": "这首适合接什么？",
+            "expected": "find_similar_tracks",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          },
+          {
+            "id": "similar-05",
+            "text": "以刚才那首为参考推荐几个替代曲目。",
+            "expected": "find_similar_tracks",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          },
+          {
+            "id": "set-01",
+            "text": "帮我编排一个 45 分钟的 DJ Set。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-02",
+            "text": "做一份逐步升温的歌单。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-03",
+            "text": "排歌：前半段平稳，后半段达到峰值。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-04",
+            "text": "给今晚的暖场安排 30 分钟音乐。",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "set-05",
+            "text": "Create a one-hour set between 118 and 132 BPM.",
+            "expected": "generate_dj_set",
+            "actual": "generate_dj_set",
+            "confidence": 0.92,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-01",
+            "text": "解释一下 Camelot wheel。",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-02",
+            "text": "侧链压缩在电子音乐里有什么作用？",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-03",
+            "text": "DJ 过渡时为什么要注意拍点？",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-04",
+            "text": "大调和小调听感上通常有什么区别？",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "chat-05",
+            "text": "你好，聊聊音乐吧。",
+            "expected": "music_chat",
+            "actual": "music_chat",
+            "confidence": 0.9,
+            "route_source": "ollama",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-01",
+            "text": "帮我写一段 Python 爬虫代码。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-02",
+            "text": "分析一下这只股票是否值得买。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-03",
+            "text": "总结今天最新政治新闻。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-04",
+            "text": "根据症状给我医疗诊断。",
+            "expected": "overstep",
+            "actual": "overstep",
+            "confidence": 0.99,
+            "route_source": "rule_or_safe_fallback",
+            "passed": true,
+            "error": null
+          },
+          {
+            "id": "overstep-05",
+            "text": "查一下 Spotify 实时排行榜。",
+            "expected": "overstep",
+            "actual": "music_chat",
+            "confidence": 0.0,
+            "route_source": "rule_or_safe_fallback",
+            "passed": false,
+            "error": null
+          }
+        ]
+      },
+      "tools": {
+        "passed": 8,
+        "total": 8,
+        "success_rate_pct": 100.0,
+        "cases": [
+          {
+            "id": "tool-01",
+            "tool": "search_library",
+            "arguments": {
+              "query": "",
+              "filters": {
+                "bpm_min": 120,
+                "bpm_max": 135
+              },
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 5 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "177a095610a89aa389bc",
+                "title": "Aeipathy",
+                "bpm": 129.2,
+                "camelot_key": "9A"
+              },
+              {
+                "track_id": "edda4e718b5cee4f9dc2",
+                "title": "Divinorum",
+                "bpm": 123.0,
+                "camelot_key": "5A"
+              },
+              {
+                "track_id": "7553a2ed6fb640ca2ca5",
+                "title": "Stardust (with HALIENE)",
+                "bpm": 129.2,
+                "camelot_key": "1A"
+              },
+              {
+                "track_id": "443a8954af142c909182",
+                "title": "Other Side",
+                "bpm": 129.2,
+                "camelot_key": "5B"
+              },
+              {
+                "track_id": "748a4934059d57903f44",
+                "title": "Not My Night",
+                "bpm": 129.2,
+                "camelot_key": "6B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-02",
+            "tool": "search_library",
+            "arguments": {
+              "query": "",
+              "filters": {
+                "title": "Last Wil"
+              },
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 1 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "e1c0468c81291ceb3d79",
+                "title": "Last Will (Rouno Remix)",
+                "bpm": 136.0,
+                "camelot_key": "8B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-03",
+            "tool": "search_library",
+            "arguments": {
+              "query": "high energy electronic music",
+              "filters": null,
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 5 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "db6ba9d2db26c346e1d5",
+                "title": "Reminder",
+                "bpm": 143.6,
+                "camelot_key": "5B"
+              },
+              {
+                "track_id": "e8659088da83a9259fea",
+                "title": "Sherwood (2022)",
+                "bpm": 152.0,
+                "camelot_key": "12A"
+              },
+              {
+                "track_id": "482792d0e401f7a09ea2",
+                "title": "Eyes Up",
+                "bpm": 95.7,
+                "camelot_key": "10B"
+              },
+              {
+                "track_id": "bc432ebef3fa3c4af777",
+                "title": "Silent Skies",
+                "bpm": 136.0,
+                "camelot_key": "11A"
+              },
+              {
+                "track_id": "7671b1cc8a0c8825db95",
+                "title": "Homura (Dabin Remix)",
+                "bpm": 152.0,
+                "camelot_key": "12B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-04",
+            "tool": "search_library",
+            "arguments": {
+              "query": "",
+              "filters": {
+                "title": "__dropit_eval_no_match__"
+              },
+              "limit": 5
+            },
+            "result_ok": true,
+            "summary": "找到 0 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [],
+            "passed": true
+          },
+          {
+            "id": "tool-05",
+            "tool": "find_similar_tracks",
+            "arguments": {
+              "track_id": "e1c0468c81291ceb3d79",
+              "limit": 3,
+              "filters": null
+            },
+            "result_ok": true,
+            "summary": "找到 3 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "6d79b5100546acb24081",
+                "title": "Colorblind",
+                "bpm": 136.0,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "4c248475f2291cf589de",
+                "title": "Sideways",
+                "bpm": 143.6,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "99098c0f20a54163ef22",
+                "title": "Kids (with Miranda Glory)",
+                "bpm": 152.0,
+                "camelot_key": "8B"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-06",
+            "tool": "find_similar_tracks",
+            "arguments": {
+              "track_id": "e1c0468c81291ceb3d79",
+              "limit": 5,
+              "filters": {
+                "bpm_min": 60,
+                "bpm_max": 220
+              }
+            },
+            "result_ok": true,
+            "summary": "找到 5 首曲目。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "6d79b5100546acb24081",
+                "title": "Colorblind",
+                "bpm": 136.0,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "4c248475f2291cf589de",
+                "title": "Sideways",
+                "bpm": 143.6,
+                "camelot_key": "7B"
+              },
+              {
+                "track_id": "99098c0f20a54163ef22",
+                "title": "Kids (with Miranda Glory)",
+                "bpm": 152.0,
+                "camelot_key": "8B"
+              },
+              {
+                "track_id": "be3a37ab0183c3969ec2",
+                "title": "What You Need",
+                "bpm": 136.0,
+                "camelot_key": "4B"
+              },
+              {
+                "track_id": "51be5299f3a44a67f8dd",
+                "title": "Silence",
+                "bpm": 143.6,
+                "camelot_key": "8A"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-07",
+            "tool": "generate_dj_set",
+            "arguments": {
+              "request": "quality eval round 7 build",
+              "duration_min": 10,
+              "bpm_min": 60,
+              "bpm_max": 220,
+              "energy_curve": "build",
+              "style_query": ""
+            },
+            "result_ok": true,
+            "summary": "已生成 2 首、约 9 分钟的 Set。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "bc432ebef3fa3c4af777",
+                "title": "Silent Skies",
+                "bpm": 136.0,
+                "camelot_key": "11A"
+              },
+              {
+                "track_id": "a722fbb037e89aecce9f",
+                "title": "Snowblind",
+                "bpm": 136.0,
+                "camelot_key": "11A"
+              }
+            ],
+            "passed": true
+          },
+          {
+            "id": "tool-08",
+            "tool": "generate_dj_set",
+            "arguments": {
+              "request": "quality eval round 7 scoped",
+              "duration_min": 10,
+              "bpm_min": 60,
+              "bpm_max": 220,
+              "energy_curve": "steady",
+              "style_query": "",
+              "track_ids": [
+                "040d8aecd4b178302f91",
+                "c905b7a001da1a61945c",
+                "482792d0e401f7a09ea2",
+                "d92887a5d63be97e5351",
+                "252c1f7d28ed1ead6f0d",
+                "5e146bf976728898b357",
+                "7e3ac38d08fafc30b836",
+                "8be4e1da6336d64698a3",
+                "416b57d312cf3e3ecf16",
+                "668fc1ecb6b4b414c6c0",
+                "8e656e9bafae84ab376d",
+                "a8df75fc21f64d3dc7ea",
+                "bde89636f09f1ccb27ab",
+                "ca5015bf4301c9e18a0d",
+                "e1556d1e22847958ac6f",
+                "e6a6a00281a127875d96",
+                "43ab50199dc212585f04",
+                "39d806aa331d1ba936f8",
+                "7ab79c6cc8e754f9506b",
+                "816887e3f689b6883ca8"
+              ]
+            },
+            "result_ok": true,
+            "summary": "已生成 3 首、约 10 分钟的 Set。",
+            "contract_ok": true,
+            "contract_errors": [],
+            "exception": null,
+            "result_preview": [
+              {
+                "track_id": "482792d0e401f7a09ea2",
+                "title": "Eyes Up",
+                "bpm": 95.7,
+                "camelot_key": "10B"
+              },
+              {
+                "track_id": "668fc1ecb6b4b414c6c0",
+                "title": "Don't Let Go",
+                "bpm": 103.4,
+                "camelot_key": "11B"
+              },
+              {
+                "track_id": "ca5015bf4301c9e18a0d",
+                "title": "Golden Hour (Chime Remix)",
+                "bpm": 107.7,
+                "camelot_key": "12B"
+              }
+            ],
+            "passed": true
+          }
+        ]
+      },
+      "rag": {
+        "accuracy_definition": "gold track returned in Top-3 for its indexed description",
+        "truthfulness_definition": "every returned evidence field exactly matches the project-scoped SQLite fact",
+        "hits_at_3": 5,
+        "queries": 5,
+        "accuracy_pct": 100.0,
+        "mrr_pct": 100.0,
+        "facts_verified": 180,
+        "facts_checked": 180,
+        "truthfulness_pct": 100.0,
+        "cases": [
+          {
+            "id": "rag-01",
+            "gold_track_id": "6d79b5100546acb24081",
+            "gold_title": "Colorblind",
+            "query": "music audio; 136.0 BPM; key F major; Camelot 7B; energy 0.89; spectral centroid 2615 Hz; onset strength 1.09",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "6d79b5100546acb24081",
+                "title": "Colorblind",
+                "score": 1.0,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "4c248475f2291cf589de",
+                "title": "Sideways",
+                "score": 0.976622,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "76a5d9ede6e87728ceb5",
+                "title": "Good News (feat. Kyle Reynolds)",
+                "score": 0.957614,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-02",
+            "gold_track_id": "723358e15ced6ba76711",
+            "gold_title": "When I Fall",
+            "query": "music audio; 129.2 BPM; key B minor; Camelot 10A; energy 0.90; spectral centroid 2469 Hz; onset strength 1.11",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "723358e15ced6ba76711",
+                "title": "When I Fall",
+                "score": 1.0,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "34c8b8a65bb1649a3b93",
+                "title": "Into Pieces (Wooli x Grabbitz Remix)",
+                "score": 0.946666,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "76c29652ff3a281229fe",
+                "title": "Tomorrow",
+                "score": 0.926597,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-03",
+            "gold_track_id": "737e09afd845c28dc356",
+            "gold_title": "Evergreen",
+            "query": "music audio; 129.2 BPM; key G# major; Camelot 4B; energy 0.82; spectral centroid 2484 Hz; onset strength 1.13",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "737e09afd845c28dc356",
+                "title": "Evergreen",
+                "score": 0.999999,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "ded2972db640277f8514",
+                "title": "Going Down",
+                "score": 0.96742,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "6bef67c05d2cc20f0197",
+                "title": "Walk On Water (Wooli & Trivecta Remix)",
+                "score": 0.954514,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-04",
+            "gold_track_id": "748a4934059d57903f44",
+            "gold_title": "Not My Night",
+            "query": "music audio; 129.2 BPM; key A# major; Camelot 6B; energy 0.94; spectral centroid 2627 Hz; onset strength 1.25",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "748a4934059d57903f44",
+                "title": "Not My Night",
+                "score": 0.999999,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "ef64c95bbeed48bbbdcb",
+                "title": "Alaska",
+                "score": 0.968471,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "737e09afd845c28dc356",
+                "title": "Evergreen",
+                "score": 0.937271,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          },
+          {
+            "id": "rag-05",
+            "gold_track_id": "7553a2ed6fb640ca2ca5",
+            "gold_title": "Stardust (with HALIENE)",
+            "query": "music audio; 129.2 BPM; key G# minor; Camelot 1A; energy 0.89; spectral centroid 2614 Hz; onset strength 1.19",
+            "ranked_results": [
+              {
+                "rank": 1,
+                "track_id": "7553a2ed6fb640ca2ca5",
+                "title": "Stardust (with HALIENE)",
+                "score": 0.999999,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 2,
+                "track_id": "76c29652ff3a281229fe",
+                "title": "Tomorrow",
+                "score": 0.95745,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              },
+              {
+                "rank": 3,
+                "track_id": "737e09afd845c28dc356",
+                "title": "Evergreen",
+                "score": 0.952221,
+                "all_facts_verified": true,
+                "failed_fact_fields": []
+              }
+            ],
+            "gold_rank": 1,
+            "hit_at_3": true,
+            "facts_verified": 36,
+            "facts_checked": 36,
+            "truthful": true,
+            "error": null
+          }
+        ]
+      }
+    }
+  ]
+}

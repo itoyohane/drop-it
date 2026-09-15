@@ -7,7 +7,8 @@
 1. [运行并观察一次工作流](tutorial-run-and-observe.md)：从安装到导入、查询和排 Set。
 2. [架构、边界与取舍](explanation-agent-architecture.md)：理解模块关系与音乐 RAG。
 3. [API、Tool 与数据参考](reference-api-tools-and-data.md)：查接口、状态、参数和环境配置。
-4. [项目演示与面试讲解](howto-ai-application-interview.md)：基于代码证据介绍项目。
+4. [七轮质量评测](quality-eval-7-rounds.md)：复现歌曲向量、意图路由、工具调用和 RAG 准确性/真实性指标。
+5. [项目演示与面试讲解](howto-ai-application-interview.md)：基于代码证据介绍项目。
 
 ## 当前范围
 
