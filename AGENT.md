@@ -12,7 +12,8 @@
 
 ## 常用命令
 
-- 离线测试：`python -m pytest backend/tests -q`
+- 全部轻量测试：`npm.cmd test`
+- 后端离线测试：`python -m pytest backend/src/tests -q --basetemp .pytest-run -p no:cacheprovider`
 - 完整音频依赖：`python -m pip install -r requirements-audio.txt`
 - 检查 API 模型配置：`python -m backend.music.download_models`
 - 启动后端：`python -m uvicorn backend.main:app --host 127.0.0.1 --port 8765`

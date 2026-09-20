@@ -3,12 +3,13 @@
 后端入口是 `backend.main:create_app`。开发环境的 OpenAPI 页面位于 `/api/docs`，生产模式关闭。
 除非另行说明，请求和响应均为 JSON；错误使用 FastAPI 的 `{ "detail": "..." }` 格式。
 
-代码入口分别位于 `backend/agent/tools.py`、`backend/agent/intent.py`、
-`backend/agent/memory.py`、`backend/repositories/` 和 `backend/workers/analyze_track.py`。
+代码入口分别位于 `backend/src/agent/tools.py`、`backend/src/agent/intent.py`、
+`backend/src/agent/memory.py`、`backend/src/agent/state.py`、`backend/src/agent/commands.py`、
+`backend/src/agent/graph.py`、`backend/src/repositories/` 和 `backend/src/workers/analyze_track.py`。
 
 ## Agent 工具
 
-三个工具都由服务端绑定当前项目，模型不能传入 `project_id`。结果统一序列化为：
+三个兼容工具都由服务端绑定当前项目，模型不能传入 `project_id`。Agent 图直接调用同一 Registry 的确定性检索、规划和持久化操作；结果统一序列化为：
 
 ```json
 {"ok": true, "summary": "找到 3 首曲目。", "data": {"tracks": []}}

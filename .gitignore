@@ -2,6 +2,7 @@ node_modules/
 dist/
 .npm-cache/
 .pytest_cache/
+.pytest-run/
 __pycache__/
 *.pyc
 test_tmp*/

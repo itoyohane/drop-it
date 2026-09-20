@@ -5,10 +5,40 @@
 ## 前提
 
 - Python 3.11+；librosa 支持 Windows、macOS 和 Linux。
+- Node.js 20+，用于 Vite 前端和无依赖的流式状态检查。
 - 至少准备两首支持格式的本地歌曲，找相似至少需要一首参考歌和一首候选歌。
 - 对话/描述需要 DeepSeek 兼容 API Key，语义检索需要 DashScope API Key；librosa 数值分析本身不需要 API Key。
 
-## 第 1 步：用 Docker 启动
+## 第 1 步：本地启动完整应用
+
+在仓库根目录运行：
+
+```powershell
+python -m pip install -r requirements.txt
+npm.cmd install
+npm.cmd run dev
+```
+
+该命令并行启动 `backend.main:app`（源码由 `backend/src` 提供）和 Vite。打开
+`http://127.0.0.1:5173/`；`http://127.0.0.1:5173/api/health` 会经 Vite 代理到固定的
+`http://127.0.0.1:8765`。API 文档位于 `http://127.0.0.1:8765/api/docs`。
+如果 `5173` 已被占用，先设置 `$env:DROPIT_WEB_PORT=5174` 再运行同一条 `npm.cmd run dev`，并将上述 Web URL
+中的端口改为 `5174`。
+
+如需验证 FastAPI 的静态托管，先构建再单独启动 API：
+
+```powershell
+npm.cmd run build
+npm.cmd run start
+```
+
+构建产物位于 `backend/dist`，打开 `http://127.0.0.1:8765/` 即可访问。开发模式使用 Vite，生产构建由 FastAPI
+从同仓库静态目录提供；两者都使用同源 `/api` 请求。
+
+未配置 `DEEPSEEK_API_KEY` 时聊天接口会在建立 SSE 前返回 `503`，前端保留已输入消息并显示配置提示；健康检查、
+项目与曲库接口仍可使用。
+
+## 第 2 步：用 Docker 启动 API
 
 在仓库根目录运行：
 
@@ -24,7 +54,7 @@ docker compose -f compose.backend.yaml up
 打开 `http://127.0.0.1:8765/api/docs`。`GET /api/health` 应返回 `status: ok`、
 `embedding_provider: librosa-deepseek-dashscope-chroma-rag` 和三个工具名。生产模式会关闭 OpenAPI 页面。
 
-## 第 2 步：配置聊天模型
+## 第 3 步：配置聊天模型
 
 在根目录新建未提交的 `.env`：
 
@@ -42,7 +72,7 @@ DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 Compose 读取当前 shell 环境做变量替换，不会自动把 `.env` 复制进镜像。修改后重启服务。
 如果只测试曲库元数据和 librosa 管线，可留空；缺少对应 API key 时，描述/embedding 阶段会在曲目状态中报告失败。
 
-## 第 3 步：导入并等待分析
+## 第 4 步：导入并等待分析
 
 通过 OpenAPI 页面依次执行：
 
@@ -59,7 +89,7 @@ Compose 读取当前 shell 环境做变量替换，不会自动把 `.env` 复制
 对应代码路径是 `workers/analyze_track.py → music/librosa_analyzer.py →
 music/text_models.py → music/indexer.py`。Worker 直接管理分阶段执行与重试，indexer 负责向量校验和写库分界。
 
-## 第 4 步：从对话调用三个工具
+## 第 5 步：从对话调用三个工具
 
 创建项目对话后，依次尝试：
 
@@ -82,10 +112,11 @@ track_id，不应出现模型编造的歌曲。
 
 ```bash
 python -m pip install -r requirements.txt
-python -m pytest backend/tests -q
+npm.cmd test
 ```
 
-它用注入的轻量分析器、描述器和向量器验证任务、项目范围、检索、工具、API、短期记忆和迁移。
+前端检查覆盖 SSE 分块解析、乐观消息对账、失败保留和三个受控工具名；后端测试用注入的轻量分析器、描述器和向量器
+验证任务、项目范围、检索、工具、API、短期记忆和迁移。
 它不下载模型，也不验证预训练模型的推荐质量。
 
 真实模型 smoke test：
@@ -120,5 +151,5 @@ python -m backend.music.download_models
 
 ### 前端行为与文档不一致
 
-本次分层重构只调整后端。先用 OpenAPI 和后端测试确认接口，再根据
-[接口参考](reference-api-tools-and-data.md)检查前端调用和 SSE 事件处理。
+确认从仓库根目录运行 `npm.cmd run dev`，并检查 `5173` 和 `8765` 未被占用。浏览器只请求同源 `/api`；
+开发时由 Vite 代理，`npm.cmd run build` 后由 FastAPI 从 `backend/dist` 提供页面和 API。
