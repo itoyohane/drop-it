@@ -241,20 +241,22 @@ def _response_evidence(state: AgentState) -> dict[str, Any]:
     return evidence
 
 
-async def _stream_response(model: Any, messages: list[tuple[str, str]]) -> tuple[list[str], str]:
+async def _stream_response(model: Any, messages: list[tuple[str, str]], writer: Any) -> str:
     chunks: list[str] = []
     astream = getattr(model, "astream", None)
     if astream is not None:
         async for chunk in astream(messages):
             text = message_text(chunk)
             if text:
+                writer({"type": "response_token", "content": text})
                 chunks.append(text)
     if not chunks:
         response = await model.ainvoke(messages)
         text = message_text(response).strip()
         if text:
+            writer({"type": "response_token", "content": text})
             chunks.append(text)
-    return chunks, "".join(chunks).strip()
+    return "".join(chunks).strip()
 
 
 async def respond(state: AgentState, runtime: Runtime[AgentRuntimeContext]) -> dict[str, Any]:
@@ -268,14 +270,16 @@ async def respond(state: AgentState, runtime: Runtime[AgentRuntimeContext]) -> d
         if item.get("role") in {"user", "assistant"}
     ], ("human", f"基于以下已验证的结构化证据回答当前用户。不要声称执行了未记录的操作：\n{evidence}")]
     try:
-        chunks, text = await _stream_response(context.model_factory(), messages)
+        text = await _stream_response(
+            context.model_factory(), messages, runtime.stream_writer
+        )
         if not text:
             raise ValueError("模型返回了空回答")
-        return {"response_chunks": chunks, "final_response": text}
+        return {"final_response": text}
     except Exception:
         detail = state.get("error_detail") or "模型调用失败，请检查服务端日志或稍后重试。"
+        runtime.stream_writer({"type": "response_token", "content": detail})
         return {
-            "response_chunks": [detail],
             "final_response": detail,
             "error_code": state.get("error_code") or "response_failed",
             "error_detail": state.get("error_detail") or detail,
@@ -292,20 +296,23 @@ async def respond_chat(state: AgentState, runtime: Runtime[AgentRuntimeContext])
         if item.get("role") in {"user", "assistant"}
     ]]
     try:
-        chunks, text = await _stream_response(context.model_factory(), messages)
+        text = await _stream_response(
+            context.model_factory(), messages, runtime.stream_writer
+        )
         if not text:
             raise ValueError("模型返回了空回答")
-        return {"response_chunks": chunks, "final_response": text}
+        return {"final_response": text}
     except Exception:
         detail = "模型调用失败，请检查服务端日志或稍后重试。"
-        return {"response_chunks": [detail], "final_response": detail,
+        runtime.stream_writer({"type": "response_token", "content": detail})
+        return {"final_response": detail,
                 "error_code": "response_failed", "error_detail": detail}
 
 
 async def reject_response(state: AgentState, runtime: Runtime[AgentRuntimeContext]) -> dict[str, Any]:
     from backend.agent.intent import OVERSTEP_RESPONSE
 
-    return {"final_response": OVERSTEP_RESPONSE, "response_chunks": []}
+    return {"final_response": OVERSTEP_RESPONSE}
 
 
 def _route(state: AgentState) -> str:

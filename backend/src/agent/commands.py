@@ -6,26 +6,34 @@ import json
 import re
 from typing import Any, Literal, TypeAlias
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from backend.models import MusicFilters
 
 
-class SearchCommand(BaseModel):
+class _StrictCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class _StrictMusicFilters(MusicFilters):
+    model_config = ConfigDict(extra="forbid")
+
+
+class SearchCommand(_StrictCommand):
     query: str = Field("", max_length=500)
-    filters: MusicFilters = Field(default_factory=MusicFilters)
+    filters: _StrictMusicFilters = Field(default_factory=_StrictMusicFilters)
     limit: int = Field(20, ge=1, le=100)
 
 
-class SimilarCommand(BaseModel):
+class SimilarCommand(_StrictCommand):
     """A reference supplied by the user, never a model-selected project scope."""
 
     reference: str = Field("", max_length=200)
-    filters: MusicFilters = Field(default_factory=MusicFilters)
+    filters: _StrictMusicFilters = Field(default_factory=_StrictMusicFilters)
     limit: int = Field(3, ge=1, le=100)
 
 
-class GenerateSetCommand(BaseModel):
+class GenerateSetCommand(_StrictCommand):
     request: str = Field("", max_length=4000)
     duration_min: int = Field(45, ge=10, le=240)
     bpm_min: int = Field(110, ge=60, le=220)
@@ -35,7 +43,7 @@ class GenerateSetCommand(BaseModel):
     track_ids: list[str] | None = Field(default=None, max_length=500)
 
 
-class MusicChatCommand(BaseModel):
+class MusicChatCommand(_StrictCommand):
     question: str = Field("", max_length=4000)
 
 

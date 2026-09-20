@@ -129,12 +129,21 @@ class DropItAgent:
         )
         final_state: dict[str, Any] = dict(initial_state)
         emitted_tools: set[str] = set()
-        emitted_chunks = 0
         graph_error: Exception | None = None
         try:
             async for update in self.graph.astream(
-                initial_state, context=context, stream_mode="updates", version="v1"
+                initial_state,
+                context=context,
+                stream_mode=["updates", "custom"],
+                version="v2",
             ):
+                if isinstance(update, dict) and update.get("type") == "custom":
+                    payload = update.get("data")
+                    if isinstance(payload, dict) and payload.get("type") == "response_token":
+                        content = payload.get("content")
+                        if content:
+                            yield {"type": "token", "content": content}
+                    continue
                 for _, delta in self._update_entries(update):
                     final_state.update(delta)
                     for event in delta.get("tool_events", []):
@@ -143,11 +152,6 @@ class DropItAgent:
                         if identity not in emitted_tools:
                             emitted_tools.add(identity)
                             yield {"type": "tool", **record.model_dump()}
-                    chunks = delta.get("response_chunks", [])
-                    for chunk in chunks[emitted_chunks:]:
-                        if chunk:
-                            yield {"type": "token", "content": chunk}
-                    emitted_chunks = max(emitted_chunks, len(chunks))
         except Exception as exc:
             graph_error = exc
             logger.exception("agent_graph_failed")

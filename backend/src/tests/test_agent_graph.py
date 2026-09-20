@@ -2,9 +2,11 @@ import asyncio
 
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
+from pydantic import ValidationError
+import pytest
 
 from backend.agent.agent import DropItAgent
-from backend.agent.commands import GenerateSetCommand
+from backend.agent.commands import GenerateSetCommand, SearchCommand
 from backend.agent.intent import OVERSTEP_RESPONSE, IntentRecognizer
 from backend.agent.tools import DropItToolRegistry
 from backend.config import Settings
@@ -19,6 +21,21 @@ class JsonSequenceModel(FakeMessagesListChatModel):
 
     def bind_tools(self, tools, **kwargs):
         raise AssertionError("the controlled graph must not bind business tools")
+
+
+class DelayedStreamingModel:
+    def __init__(self):
+        self.first_chunk_started = asyncio.Event()
+        self.release_second_chunk = asyncio.Event()
+
+    async def astream(self, messages):
+        self.first_chunk_started.set()
+        yield AIMessage(content="第一段")
+        await self.release_second_chunk.wait()
+        yield AIMessage(content="第二段")
+
+    async def ainvoke(self, messages):
+        return AIMessage(content="unused")
 
 
 def collect(agent, project_id, conversation_id, text):
@@ -77,6 +94,48 @@ def test_search_route_uses_typed_command_and_preserves_sse_contract(library):
     assert events[-1]["message"]["content"] == "曲库中找到 Signal。"
     assert events[-1]["message"]["tool_events"][0]["name"] == "search_library"
     assert events[-1]["playlist"] is None
+
+
+def test_command_schemas_forbid_model_selected_scope():
+    with pytest.raises(ValidationError):
+        SearchCommand.model_validate({"query": "house", "project_id": "other-project"})
+
+
+def test_final_response_tokens_stream_before_graph_node_finishes(library):
+    store, project, _, _, registry = library
+    model = DelayedStreamingModel()
+    agent = DropItAgent(
+        store, registry, Settings(_env_file=None, DEEPSEEK_API_KEY="test-only"),
+        intent=IntentRecognizer(),
+    )
+    agent._chat_model = lambda: model
+    conversation = store.ensure_default_conversation(project.id)
+
+    async def run():
+        events = []
+        first_token_seen = asyncio.Event()
+
+        async def consume():
+            async for event in agent.stream_chat(project.id, conversation.id, "解释一下 Camelot wheel"):
+                events.append(event)
+                if event["type"] == "token":
+                    first_token_seen.set()
+
+        task = asyncio.create_task(consume())
+        try:
+            await asyncio.wait_for(model.first_chunk_started.wait(), 1)
+            await asyncio.wait_for(first_token_seen.wait(), .2)
+            assert not task.done(), "the graph must still be waiting for the second model chunk"
+        finally:
+            model.release_second_chunk.set()
+            await task
+        return events
+
+    events = asyncio.run(run())
+    token_contents = [event["content"] for event in events if event["type"] == "token"]
+    assert token_contents == ["第一段", "第二段"]
+    assert events.index(next(event for event in events if event["type"] == "token")) < len(events) - 1
+    assert events[-1]["type"] == "complete"
 
 
 def test_similar_route_resolves_reference_before_ranking(library):

@@ -42,7 +42,6 @@ class AgentState(TypedDict, total=False):
     playlist: Playlist | None
     tool_events: list[ToolEvent]
     final_response: str
-    response_chunks: list[str]
     error_code: str | None
     error_detail: str | None
 
