@@ -5,7 +5,8 @@
 
 - 后端：Python、FastAPI、LangChain 单 Agent、SQLite。
 - 音乐分析：librosa；DeepSeek-V4.1-Flash 生成歌曲文本描述，DashScope `qwen3.7-text-embedding` + Chroma 用于音乐 RAG。
-- 工具业务逻辑集中在 `backend/agent/tools.py`，不设 `services/` 层。
+- 工具业务逻辑集中在 `backend/src/agent/tools.py`，不设 `services/` 层；LangChain `@tool`
+  兼容适配器位于 `backend/src/agent/tool_adapters.py`，受控 Graph 节点直接调用 Registry。
 - Agent 工具仅有 `search_library`、`find_similar_tracks`、`generate_dj_set`。
 - 前端：React + Vite；当前工作区仍是旧原型，尚未适配新后端。
 - 架构与开发说明见 [docs](docs/README.md)；界面设计参考 [DESIGN.md](DESIGN.md)。

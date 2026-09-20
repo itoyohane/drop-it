@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from langchain_openai import ChatOpenAI
 
+from backend.agent.commands import message_text
 from backend.agent.graph import build_graph
 from backend.agent.intent import Intent, IntentRecognizer
 from backend.agent.memory import ContextCompressor, ShortTermMemory
@@ -204,7 +205,7 @@ class DropItAgent:
                 )),
                 ("human", json.dumps(older, ensure_ascii=False)),
             ])
-            summary = self._message_text(response).strip()
+            summary = message_text(response).strip()
             if not summary:
                 raise ValueError("模型返回了空摘要")
             compacted = self.context_compressor.with_summary(summary, recent)
@@ -226,19 +227,10 @@ class DropItAgent:
                 )
         raise RuntimeError("Agent 未返回最终消息")
 
-    @staticmethod
-    def _message_text(value: Any) -> str:
-        content = getattr(value, "content", value)
-        if isinstance(content, str):
-            return content
-        if isinstance(content, list):
-            return "".join(block.get("text", "") for block in content if isinstance(block, dict))
-        return ""
-
     @classmethod
     def _parse_tool_result(cls, value: Any) -> ToolResult:
         try:
-            return ToolResult.model_validate_json(cls._message_text(value))
+            return ToolResult.model_validate_json(message_text(value))
         except ValueError:
             return ToolResult(ok=False, summary="工具返回了无效结果，请重试。")
 
