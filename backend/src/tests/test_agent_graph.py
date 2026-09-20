@@ -1,5 +1,7 @@
 import asyncio
+from pathlib import Path
 
+import backend
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
 from pydantic import ValidationError
@@ -55,6 +57,10 @@ def configured_agent(store, project, model):
     agent._chat_model = lambda: model
     conversation = store.ensure_default_conversation(project.id)
     return agent, conversation
+
+
+def test_backend_package_prefers_relocated_source_tree():
+    assert Path(backend.__path__[0]).resolve() == Path("backend/src").resolve()
 
 
 def test_graph_has_explicit_routes_and_terminal_edges(library):
