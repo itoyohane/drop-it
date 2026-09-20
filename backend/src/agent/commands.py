@@ -43,11 +43,7 @@ class GenerateSetCommand(_StrictCommand):
     track_ids: list[str] | None = Field(default=None, max_length=500)
 
 
-class MusicChatCommand(_StrictCommand):
-    question: str = Field("", max_length=4000)
-
-
-CommandPayload: TypeAlias = SearchCommand | SimilarCommand | GenerateSetCommand | MusicChatCommand
+CommandPayload: TypeAlias = SearchCommand | SimilarCommand | GenerateSetCommand
 
 
 _SCHEMAS: dict[str, type[BaseModel]] = {
@@ -135,6 +131,4 @@ async def extract_command(model: Any, route: str, history: list[dict[str, str]],
 
     if isinstance(command, GenerateSetCommand) and not command.request.strip():
         command = command.model_copy(update={"request": user_text[:4000]})
-    if isinstance(command, MusicChatCommand) and not command.question.strip():
-        command = command.model_copy(update={"question": user_text[:4000]})
     return command  # type: ignore[return-value]

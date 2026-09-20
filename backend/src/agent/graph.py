@@ -91,7 +91,9 @@ async def search_library(state: AgentState, runtime: Runtime[AgentRuntimeContext
         return _failure(state, "search_library", "search_failed", _exception_detail(exc))
 
 
-async def resolve_reference(state: AgentState, runtime: Runtime[AgentRuntimeContext]) -> dict[str, Any]:
+async def extract_and_resolve_reference(
+    state: AgentState, runtime: Runtime[AgentRuntimeContext]
+) -> dict[str, Any]:
     """Extract a SimilarCommand and resolve its reference within server scope."""
 
     context = _context(runtime)
@@ -259,6 +261,32 @@ async def _stream_response(model: Any, messages: list[tuple[str, str]], writer: 
     return "".join(chunks).strip()
 
 
+async def _generate_response(
+    context: AgentRuntimeContext,
+    messages: list[tuple[str, str]],
+    writer: Any,
+    *,
+    error_code: str,
+    error_detail: str,
+) -> dict[str, Any]:
+    """Stream one model response and preserve the graph's error contract."""
+
+    try:
+        text = await _stream_response(
+            context.model_factory(), messages, writer
+        )
+        if not text:
+            raise ValueError("模型返回了空回答")
+        return {"final_response": text}
+    except Exception:
+        writer({"type": "response_token", "content": error_detail})
+        return {
+            "final_response": error_detail,
+            "error_code": error_code,
+            "error_detail": error_detail,
+        }
+
+
 async def respond(state: AgentState, runtime: Runtime[AgentRuntimeContext]) -> dict[str, Any]:
     """Use the model only for the final natural-language response."""
 
@@ -269,21 +297,14 @@ async def respond(state: AgentState, runtime: Runtime[AgentRuntimeContext]) -> d
         for item in state.get("history", [])
         if item.get("role") in {"user", "assistant"}
     ], ("human", f"基于以下已验证的结构化证据回答当前用户。不要声称执行了未记录的操作：\n{evidence}")]
-    try:
-        text = await _stream_response(
-            context.model_factory(), messages, runtime.stream_writer
-        )
-        if not text:
-            raise ValueError("模型返回了空回答")
-        return {"final_response": text}
-    except Exception:
-        detail = state.get("error_detail") or "模型调用失败，请检查服务端日志或稍后重试。"
-        runtime.stream_writer({"type": "response_token", "content": detail})
-        return {
-            "final_response": detail,
-            "error_code": state.get("error_code") or "response_failed",
-            "error_detail": state.get("error_detail") or detail,
-        }
+    detail = state.get("error_detail") or "模型调用失败，请检查服务端日志或稍后重试。"
+    return await _generate_response(
+        context,
+        messages,
+        runtime.stream_writer,
+        error_code=state.get("error_code") or "response_failed",
+        error_detail=detail,
+    )
 
 
 async def respond_chat(state: AgentState, runtime: Runtime[AgentRuntimeContext]) -> dict[str, Any]:
@@ -295,18 +316,14 @@ async def respond_chat(state: AgentState, runtime: Runtime[AgentRuntimeContext])
         for item in state.get("history", [])
         if item.get("role") in {"user", "assistant"}
     ]]
-    try:
-        text = await _stream_response(
-            context.model_factory(), messages, runtime.stream_writer
-        )
-        if not text:
-            raise ValueError("模型返回了空回答")
-        return {"final_response": text}
-    except Exception:
-        detail = "模型调用失败，请检查服务端日志或稍后重试。"
-        runtime.stream_writer({"type": "response_token", "content": detail})
-        return {"final_response": detail,
-                "error_code": "response_failed", "error_detail": detail}
+    detail = "模型调用失败，请检查服务端日志或稍后重试。"
+    return await _generate_response(
+        context,
+        messages,
+        runtime.stream_writer,
+        error_code="response_failed",
+        error_detail=detail,
+    )
 
 
 async def reject_response(state: AgentState, runtime: Runtime[AgentRuntimeContext]) -> dict[str, Any]:
@@ -328,7 +345,7 @@ def build_graph():
     builder = StateGraph(AgentState, context_schema=AgentRuntimeContext)
     builder.add_node("search_library", search_library)
     builder.add_node("respond", respond)
-    builder.add_node("resolve_reference", resolve_reference)
+    builder.add_node("resolve_reference", extract_and_resolve_reference)
     builder.add_node("find_similar_tracks", find_similar_tracks)
     builder.add_node("retrieve_candidates", retrieve_candidates)
     builder.add_node("plan_set", plan_set)
