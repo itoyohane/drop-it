@@ -14,4 +14,4 @@
 
 ## 验证与复盘
 
-回归测试覆盖 `111` 不调用 Ollama、无效 Ollama 输出降级以及 `music_chat` 不绑定工具，并检查 Prompt 不再声称始终拥有工具。关键实现见 `backend/agent/intent.py`，测试见 `backend/tests/test_intent_memory.py` 和 `backend/tests/test_services.py`。
+回归测试覆盖 `111` 不调用 Ollama、无效 Ollama 输出降级以及 `music_chat` 不绑定工具，并检查 Prompt 不再声称始终拥有工具。关键实现见 `backend/src/agent/intent.py`，测试见 `backend/src/tests/test_intent_memory.py` 和 `backend/src/tests/test_services.py`。

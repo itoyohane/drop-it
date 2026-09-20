@@ -6,8 +6,8 @@
 
 > DropIt 是一个本地曲库分析、检索和 DJ Set 编排助手。歌曲导入后，后台用 librosa 提取 BPM、
 > 调性、Camelot、能量和频谱特征，用 DeepSeek-V4.1-Flash 生成可观察的歌曲描述，再用 DashScope `qwen3.7-text-embedding` 编成向量，并将属性、描述、向量和任务状态
-> 持久化在 SQLite。对话层只有一个 LangChain Agent，它按需调用三个项目范围工具：查曲库、找相似、
-> 排 Set。用户查询与歌曲描述用同一文本向量空间检索；标题、艺人、BPM 等走精确过滤；最终排 Set
+> 持久化在 SQLite。对话层只有一个直接编译的 LangGraph StateGraph，模型只提取 typed command 和生成最终回答，
+> 确定性节点负责查曲库、找相似、排 Set。用户查询与歌曲描述用同一文本向量空间检索；标题、艺人、BPM 等走精确过滤；最终排 Set
 > 由确定性规划器完成并保存。前端通过稳定 SSE 事件看到 token、工具状态和结果。系统没有普通文本
 > 向量库、外部曲库搜索或伪多 Agent 流程，缺少模型和索引时明确失败。
 
@@ -20,15 +20,13 @@
 5. 生成 Set，打开规则报告，展示调序、确认和导出。
 6. 最后主动说明单用户、线性检索、单 worker、启发式规划和旧前端联调状态。
 
-展示代码时按 `agent/tools → repositories/music → worker` 讲：Agent 选择能力，tool 函数直接执行三项业务，
-repository 限制数据访问，music 适配模型，worker 承担长任务。`intent.py` 和 `memory.py` 分别提供五路意图识别、超纲拒答与可压缩短期上下文。
+展示代码时按 `agent/intent → agent/graph/state/commands → agent/tools → repositories/music → worker` 讲：硬路由和 typed command 先固定任务，图节点直接执行三项业务，repository 限制数据访问，music 适配模型，worker 承担长任务。`memory.py` 提供可压缩短期上下文。
 
 ## 高频问题
 
 ### 为什么这是 Agent，不是固定 if/else？
 
-对话统一交给 `create_agent`。模型结合历史和工具描述决定是否查询、先解析参考歌曲还是生成 Set，
-工具结果再进入下一轮推理。后台分析不是 Agent 工具，因为上传后确定执行，不需要语言模型决策。
+对话先由 `IntentRecognizer` 做硬路由，再进入一次编译的 `StateGraph`。搜索、相似和 Set 的节点顺序由条件边固定，模型只做 route-specific typed command 提取和最终自然语言表达；后台分析不是 Agent 工具，因为上传后确定执行，不需要语言模型决策。这样仍是 Agent 应用，但执行过程可测试、可追踪且有明确终止条件。
 
 ### 为什么改用 librosa + 文本描述 API？
 

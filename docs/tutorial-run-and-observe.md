@@ -82,7 +82,7 @@ track_id，不应出现模型编造的歌曲。
 
 ```bash
 python -m pip install -r requirements.txt
-python -m pytest backend/tests -q
+python -m pytest backend/src/tests -q --basetemp .pytest-tmp -p no:cacheprovider
 ```
 
 它用注入的轻量分析器、描述器和向量器验证任务、项目范围、检索、工具、API、短期记忆和迁移。
