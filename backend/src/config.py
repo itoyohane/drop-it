@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     agent_context_summary_tokens: int = Field(
         512, ge=64, le=4096, validation_alias="DROPIT_AGENT_CONTEXT_SUMMARY_TOKENS"
     )
+    agent_run_lease_seconds: float = Field(
+        15.0, gt=0.05, le=300, validation_alias="DROPIT_AGENT_RUN_LEASE_SECONDS"
+    )
     langsmith_tracing: bool = Field(False, validation_alias="LANGSMITH_TRACING")
     langsmith_api_key: SecretStr | None = Field(
         None, validation_alias="LANGSMITH_API_KEY"
@@ -117,6 +120,12 @@ class Settings(BaseSettings):
     def configure_langsmith(self) -> None:
         """Make .env LangSmith settings available to LangChain's tracer."""
         if not self.langsmith_tracing:
+            # An inherited/.env tracing flag can otherwise start LangSmith's
+            # non-daemon control thread as soon as a graph invokes a model.
+            # Explicitly disable both supported tracing switches when this
+            # process is configured not to trace (notably test workers).
+            os.environ["LANGSMITH_TRACING"] = "false"
+            os.environ["LANGCHAIN_TRACING_V2"] = "false"
             return
 
         api_key = (

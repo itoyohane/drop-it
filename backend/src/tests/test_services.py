@@ -143,7 +143,7 @@ def test_tools_ground_responses_and_report_missing_index(library):
 def test_set_tool_works_with_features_and_requires_index_for_style(library):
     store, project, other, _, rag = library
     for index, energy in enumerate((.3, .5, .8)):
-        add_track(store, project, f"set-{index}", energy=energy)
+        add_track(store, project, f"set-{index}", energy=energy, duration_sec=200)
     add_track(store, other, "foreign", energy=.4)
     registry = rag
     result = invoke(registry, project.id, "generate_dj_set", request="逐步升能量",
@@ -170,8 +170,8 @@ def test_global_catalog_can_retrieve_but_not_save_set(library):
 
 def test_agent_selected_tracks_constrain_the_set(library):
     store, project, other, _, rag = library
-    for name in ("chosen", "unselected"):
-        add_track(store, project, name)
+    add_track(store, project, "chosen", duration_sec=2700)
+    add_track(store, project, "unselected")
     add_track(store, other, "foreign")
     registry = rag
     result = invoke(registry, project.id, "generate_dj_set", request="selected songs", track_ids=["chosen"])

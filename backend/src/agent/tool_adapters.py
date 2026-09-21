@@ -80,6 +80,7 @@ def build_tools(registry: DropItToolRegistry, project_id: str):
         energy_curve: Literal["steady", "build", "peak", "wave"] = "build",
         style_query: str = "",
         track_ids: Annotated[list[str] | None, Field(max_length=500)] = None,
+        required_tracks: Annotated[list[str] | None, Field(max_length=500)] = None,
     ) -> str:
         """Generate and persist a DJ set from this project's analyzed songs.
 
@@ -98,9 +99,10 @@ def build_tools(registry: DropItToolRegistry, project_id: str):
                 energy_curve=energy_curve,
                 style_query=style_query,
                 track_ids=track_ids,
+                required_tracks=required_tracks,
             )
             candidates = registry.retrieve_set_candidates(project_id, command)
-            playlist = registry.plan_set(project_id, command, candidates)
+            playlist, _, _ = registry.validate_and_repair_set(project_id, command, candidates)
             registry.persist_set(project_id, playlist)
             return ToolResult(
                 ok=True,

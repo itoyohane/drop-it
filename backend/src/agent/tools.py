@@ -10,8 +10,11 @@ from uuid import uuid4
 import numpy as np
 
 from backend.agent.commands import GenerateSetCommand
+from backend.agent.set_repair import SetRepairer
+from backend.agent.set_validation import SetValidationResult, SetValidator, target_energy_for_curve
 from backend.models import (
     AgentEvent, Brief, MusicFilters, MusicMatch, Playlist, PlaylistTrack, Track,
+    derive_agent_playlist_id,
 )
 from backend.music.text_models import TextEmbedder, unit_vector
 from backend.repositories import GLOBAL_PROJECT_ID, DropItStore
@@ -23,6 +26,43 @@ class MissingTrackReferenceError(ValueError):
 
 class AmbiguousTrackReferenceError(ValueError):
     """The requested reference resolves to more than one scoped track."""
+
+
+class SetConstraintConflictError(ValueError):
+    """Raised when two deterministic repair rounds cannot satisfy a Set."""
+
+    def __init__(self, result: SetValidationResult, attempts: int):
+        self.result = result
+        self.attempts = attempts
+        suggestions_by_code = {
+            "track_membership": "仅使用当前项目曲库中的候选曲目",
+            "duplicate_tracks": "允许增加候选曲目数量",
+            "bpm_range": "放宽 BPM 范围",
+            "duration_tolerance": "放宽目标时长或时长误差",
+            "duration_summary_mismatch": "重新生成 Playlist 时长摘要",
+            "bpm_transition": "放宽相邻 BPM 转场阈值",
+            "camelot_compatibility": "放宽 Camelot 调性兼容要求",
+            "energy_curve": "放宽能量曲线要求",
+            "required_tracks": "减少或更换必选曲目",
+        }
+        self.issues = [issue.model_dump(mode="json") for issue in result.issues]
+        self.suggestions = list(dict.fromkeys(
+            suggestions_by_code.get(issue.code, f"放宽 {issue.code} 条件")
+            for issue in result.issues
+        ))
+        codes = ", ".join(dict.fromkeys(issue.code for issue in result.issues))
+        super().__init__(
+            f"Set 约束冲突（最多修复 {attempts} 轮仍失败）：{codes}。"
+            f"建议：{'；'.join(self.suggestions)}。"
+        )
+
+    def api_detail(self) -> dict[str, object]:
+        return {
+            "code": "constraint_conflict",
+            "issues": self.issues,
+            "suggestions": self.suggestions,
+            "repair_attempts": self.attempts,
+        }
 
 
 class DropItToolRegistry:
@@ -109,7 +149,7 @@ class DropItToolRegistry:
         return candidates
 
     def plan_set(self, project_id: str, command: GenerateSetCommand,
-                 candidates: list[Track]) -> Playlist:
+                 candidates: list[Track], *, playlist_id: str | None = None) -> Playlist:
         brief = Brief(
             title=command.request[:60] or "Untitled set",
             duration_min=command.duration_min,
@@ -119,12 +159,57 @@ class DropItToolRegistry:
             style=command.style_query,
             notes=command.request,
         )
-        return generate_playlist(project_id, brief, candidates)
+        return generate_playlist(project_id, brief, candidates, playlist_id=playlist_id)
 
-    def persist_set(self, project_id: str, playlist: Playlist) -> Playlist:
+    def validate_and_repair_set(self, project_id: str, command: GenerateSetCommand,
+                                candidates: list[Track], playlist: Playlist | None = None,
+                                *, validator: SetValidator | None = None,
+                                repairer: SetRepairer | None = None) -> tuple[
+                                    Playlist, SetValidationResult, int]:
+        """Plan, validate and repair a Set before any persistence side effect."""
+
+        validator = validator or SetValidator()
+        repairer = repairer or SetRepairer(validator=validator)
+        current = playlist or self.plan_set(project_id, command, candidates)
+        allowed_ids = [track.id for track in candidates]
+        result = validator.validate(
+            current, allowed_ids, required_tracks=command.required_tracks or []
+        )
+        attempts = 0
+        while not result.valid and attempts < repairer.max_rounds:
+            attempts += 1
+            current = repairer.repair(
+                current, result.issues, candidates,
+                required_tracks=command.required_tracks or [], attempt=attempts,
+            ).playlist
+            result = validator.validate(
+                current, allowed_ids, required_tracks=command.required_tracks or []
+            )
+        if not result.valid:
+            raise SetConstraintConflictError(result, attempts)
+        return current, result, attempts
+
+    def persist_set(self, project_id: str, playlist: Playlist, *, run_id: str | None = None,
+                    owner: str | None = None, token: int | None = None) -> Playlist:
         if playlist.project_id != project_id:
             raise ValueError("Set 项目范围与当前对话不一致。")
-        return self.store.save_playlist(playlist)
+        result = SetValidator().validate(
+            playlist, [track.id for track in self.store.all_tracks(project_id)]
+        )
+        if not result.valid:
+            raise SetConstraintConflictError(result, 0)
+        if run_id is not None:
+            expected_id = derive_agent_playlist_id(project_id, run_id)
+            if playlist.id != expected_id:
+                raise ValueError("Agent Playlist ID 不是由 project_id+run_id 规范派生")
+            if playlist.agent_run_id != run_id:
+                raise ValueError("Agent Playlist payload 缺少匹配的 agent_run_id")
+            if owner is None or token is None:
+                raise ValueError("Agent Playlist 写入需要当前 claim owner/token")
+            return self.store.save_agent_playlist(run_id, project_id, playlist, owner, token)
+        # API-created playlists retain their normal random/idempotent primary key.
+        existing = self.store.get_playlist(playlist.id)
+        return existing or self.store.save_playlist(playlist)
 
     def _rank(self, tracks: list[Track], vectors: dict[str, np.ndarray], query) -> list[MusicMatch]:
         query = unit_vector(query)
@@ -150,7 +235,8 @@ class DropItToolRegistry:
         return build_tools(self, project_id)
 
 
-def generate_playlist(project_id: str, brief: Brief, library: list[Track]) -> Playlist:
+def generate_playlist(project_id: str, brief: Brief, library: list[Track],
+                      *, playlist_id: str | None = None) -> Playlist:
     if brief.bpm_min > brief.bpm_max:
         raise ValueError("BPM 下限不能高于上限")
     candidates = [track for track in library if track.analysis_status == "analyzed"
@@ -188,7 +274,7 @@ def generate_playlist(project_id: str, brief: Brief, library: list[Track]) -> Pl
         "无重复曲目", f"目标 {brief.duration_min} 分钟，当前误差 {duration_error * 100:.1f}%",
         f"相邻 BPM 大跳跃 {bpm_jumps} 处", "所有 track_id 均来自当前项目曲库",
     ]
-    return Playlist(id=uuid4().hex, project_id=project_id, brief=brief, tracks=rows,
+    return Playlist(id=playlist_id or uuid4().hex, project_id=project_id, brief=brief, tracks=rows,
                     duration_sec=total, report=report, trace=trace)
 
 
@@ -200,16 +286,6 @@ def _order_for_curve(candidates: list[Track], curve: str, target_seconds: int) -
     low = energies[max(0, len(energies) // 5)]
     high = energies[min(len(energies) - 1, len(energies) * 4 // 5)]
 
-    def target_energy(position: int) -> float:
-        ratio = position / max(1, approximate_count - 1)
-        if curve == "steady":
-            return energies[len(energies) // 2]
-        if curve == "wave":
-            return low + (high - low) * (.5 + .5 * math.sin(ratio * math.pi * 2 - math.pi / 2))
-        if curve == "peak":
-            return high
-        return low + (high - low) * ratio
-
     remaining = candidates[:]
     ordered: list[Track] = []
     while remaining:
@@ -219,7 +295,7 @@ def _order_for_curve(candidates: list[Track], curve: str, target_seconds: int) -
         if previous and not compatible:
             break
         pool = compatible if previous else remaining
-        desired = target_energy(len(ordered))
+        desired = target_energy_for_curve(curve, len(ordered), approximate_count, low, high)
 
         def score(track: Track) -> float:
             energy_cost = abs(track.energy - desired) * 8

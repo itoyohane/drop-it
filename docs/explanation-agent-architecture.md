@@ -13,12 +13,14 @@ P0 item 1 的图分支是：
 ```text
 search_library → respond → END
 resolve_reference → find_similar_tracks → respond → END
-retrieve_candidates → plan_set → persist_set → respond → END
+retrieve_candidates → plan_set → validate_set
+  ├─ valid → persist_set → respond → END
+  └─ invalid → repair_set → validate_set（最多两轮）
 respond_chat → END
 reject_response → END
 ```
 
-入口通过条件边直接选择分支，没有空的 `route` 节点，也没有模型自由调用工具的 ReAct 循环。`overstep` 在图外由硬路由直接进入拒答；`music_chat` 的回答模型不绑定业务工具。P0 item 2 的 validation/repair 和 P0 item 3 的 checkpoint 不在本次范围内。
+入口通过条件边直接选择分支，没有空的 `route` 节点，也没有模型自由调用工具的 ReAct 循环。`overstep` 在图外由硬路由直接进入拒答；`music_chat` 的回答模型不绑定业务工具。P0 item 2 的 validation/repair 已接入 Set 分支；P0 item 3 使用 SQLite 节点 checkpoint、短租约心跳与单调 fencing token，进程中断后可在租约到期时由新 owner 接管，旧 token 的 checkpoint、状态、消息和 Playlist 写入会被拒绝。
 
 ## 目录与依赖方向
 

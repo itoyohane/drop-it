@@ -41,6 +41,7 @@ class GenerateSetCommand(_StrictCommand):
     energy_curve: Literal["steady", "build", "peak", "wave"] = "build"
     style_query: str = Field("", max_length=500)
     track_ids: list[str] | None = Field(default=None, max_length=500)
+    required_tracks: list[str] | None = Field(default=None, max_length=500)
 
 
 CommandPayload: TypeAlias = SearchCommand | SimilarCommand | GenerateSetCommand

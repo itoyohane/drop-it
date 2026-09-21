@@ -77,7 +77,8 @@ def test_graph_has_explicit_routes_and_terminal_edges(library):
     assert ("search_library", "respond") in edges
     assert ("resolve_reference", "find_similar_tracks") in edges
     assert ("retrieve_candidates", "plan_set") in edges
-    assert ("plan_set", "persist_set") in edges
+    assert ("plan_set", "validate_set") in edges
+    assert ("validate_set", "persist_set") in edges
     assert ("persist_set", "respond") in edges
     assert ("respond_chat", "__end__") in edges
     assert ("reject_response", "__end__") in edges
@@ -187,7 +188,7 @@ def test_similar_route_reports_missing_and_ambiguous_references(library):
 
 def test_generate_set_retrieves_plans_and_persists_once(library):
     store, project, _, _, _ = library
-    add_track(store, project, "Signal", [1, 0, 0])
+    add_track(store, project, "Signal", [1, 0, 0], duration_sec=600)
     model = JsonSequenceModel(responses=[
         AIMessage(content=(
             '{"request":"warm-up","duration_min":10,"bpm_min":110,"bpm_max":140,'
@@ -203,7 +204,7 @@ def test_generate_set_retrieves_plans_and_persists_once(library):
     assert events[-1]["message"]["tool_events"] == [{
         "name": "generate_dj_set",
         "status": "done",
-        "summary": "已生成 1 首、约 4 分钟的 Set。",
+        "summary": "已生成 1 首、约 10 分钟的 Set。",
     }]
 
 
