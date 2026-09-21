@@ -11,8 +11,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.agent.agent import DropItAgent, MODEL_NOT_CONFIGURED_ERROR
-from backend.agent.commands import GenerateSetCommand
-from backend.agent.intent import IntentRecognizer, OllamaIntentFallback
+from backend.agent.graph import GenerateSetCommand, IntentRecognizer, OllamaIntentFallback
 from backend.audio import pending_track, sha256_file
 from backend.config import Settings
 from backend.workers.analyze_track import JobRunner
@@ -25,7 +24,14 @@ from backend.music.text_models import (
     DashScopeTextEmbedder, DeepSeekTrackDescriptor, TextEmbedder, TrackDescriptor,
 )
 from backend.repositories import GLOBAL_PROJECT_ID, DropItStore
-from backend.agent.tools import DropItToolRegistry, SetConstraintConflictError, render_export
+from backend.agent.retrieval import DropItToolRegistry
+from backend.agent.set_planning import (
+    SetConstraintConflictError,
+    persist_set,
+    plan_set,
+    render_export,
+    validate_and_repair_set,
+)
 
 
 SUPPORTED_AUDIO = {".mp3", ".wav", ".flac", ".aiff", ".aif", ".m4a"}
@@ -376,8 +382,20 @@ def create_app(settings: Settings | None = None, *, embedder: TextEmbedder | Non
                 style_query=brief.style,
             )
             candidates = store.all_tracks(project_id)
-            playlist, _, _ = registry.validate_and_repair_set(project_id, command, candidates)
-            return registry.persist_set(project_id, playlist)
+            playlist = plan_set(
+                project_id,
+                candidates,
+                request=command.request,
+                duration_min=command.duration_min,
+                bpm_min=command.bpm_min,
+                bpm_max=command.bpm_max,
+                energy_curve=command.energy_curve,
+                style_query=command.style_query,
+            )
+            playlist, _, _ = validate_and_repair_set(
+                playlist, candidates, required_tracks=command.required_tracks
+            )
+            return persist_set(store, project_id, playlist)
         except SetConstraintConflictError as exc:
             raise HTTPException(409, exc.api_detail()) from exc
         except ValueError as exc:

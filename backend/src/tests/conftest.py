@@ -16,7 +16,7 @@ os.environ["DROPIT_DATA_DIR"] = str(_bootstrap_dir)
 os.environ["DEEPSEEK_API_KEY"] = ""
 
 from backend.models import Track
-from backend.agent.tools import DropItToolRegistry
+from backend.agent.retrieval import DropItToolRegistry
 from backend.repositories import DropItStore
 
 

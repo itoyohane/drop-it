@@ -12,12 +12,11 @@ import pytest
 
 from backend.agent.agent import DropItAgent
 from backend.agent.checkpoints import AgentCheckpointStore, next_node_for_checkpoint
-from backend.agent.commands import GenerateSetCommand
-from backend.agent.intent import IntentRecognizer
-from backend.agent.set_repair import SetRepairer
-from backend.agent.set_validation import SetValidator
-from backend.agent.tools import (
-    DropItToolRegistry, SetConstraintConflictError, generate_playlist,
+from backend.agent.graph import GenerateSetCommand, IntentRecognizer
+from backend.agent.retrieval import DropItToolRegistry
+from backend.agent.set_planning import (
+    SetConstraintConflictError, SetRepairer, SetValidator, generate_playlist, plan_set,
+    validate_and_repair_set,
 )
 from backend.config import Settings
 from backend.main import create_app
@@ -129,10 +128,20 @@ def test_unrepairable_set_uses_exactly_two_rounds_and_is_not_persisted(library):
     command = GenerateSetCommand(
         request="required conflict", duration_min=10, required_tracks=["missing"]
     )
-    candidates = registry.retrieve_set_candidates(project.id, command)
+    candidates = registry.retrieve_set_candidates(
+        project.id, bpm_min=command.bpm_min, bpm_max=command.bpm_max,
+        style_query=command.style_query, track_ids=command.track_ids,
+    )
+    playlist = plan_set(
+        project.id, candidates, request=command.request, duration_min=command.duration_min,
+        bpm_min=command.bpm_min, bpm_max=command.bpm_max,
+        energy_curve=command.energy_curve, style_query=command.style_query,
+    )
 
     with pytest.raises(SetConstraintConflictError) as caught:
-        registry.validate_and_repair_set(project.id, command, candidates)
+        validate_and_repair_set(
+            playlist, candidates, required_tracks=command.required_tracks
+        )
 
     assert caught.value.attempts == 2
     assert "required_tracks" in caught.value.result.failed_codes
@@ -549,7 +558,6 @@ def test_restart_after_set_repaired_continues_at_validation(library):
         raise AssertionError("resume must not rerun retrieval or planning")
 
     registry.retrieve_set_candidates = forbidden
-    registry.plan_set = forbidden
     model = _JsonModel(responses=[AIMessage(content="已恢复并保存。")])
     agent = DropItAgent(
         store, registry, Settings(_env_file=None, DEEPSEEK_API_KEY="test-only"),

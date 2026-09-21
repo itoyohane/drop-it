@@ -7,14 +7,14 @@ P0 To-Be-Solved List
 修改：
 backend/src/agent/agent.py
 新增：
-backend/src/agent/state.py
-backend/src/agent/commands.py
 backend/src/agent/graph.py
 改成什么
 使用直接编译的 LangGraph StateGraph 构建受控执行图。IntentRecognizer 先做硬路由，图使用条件边选择以下分支：
 search_library → respond → END
 resolve_reference → find_similar_tracks → respond → END
-retrieve_candidates → plan_set → persist_set → respond → END
+retrieve_candidates → plan_set → validate_set
+  ├─ valid → persist_set → respond → END
+  └─ invalid → repair_set → validate_set（最多两轮）
 respond_chat → END
 reject_response → END
 
@@ -51,7 +51,7 @@ class AgentState(TypedDict):
 2. Set 校验失败后仍然会返回结果
 - 已完成（P0 item 2）
 完成前问题
-[tools.py (line 205)](../backend/src/agent/tools.py:205) 当时已经计算：
+旧版 Set 规划代码当时已经计算：
 - BPM 大跳跃
 - Camelot 不兼容
 - 时长误差
@@ -59,11 +59,10 @@ class AgentState(TypedDict):
 当时流程是：
 生成 Set → 记录失败信息 → 仍然保存
 要改什么
-从 tools.py 提取校验逻辑，新增：
-backend/src/agent/set_validation.py
-backend/src/agent/set_repair.py
+从旧工具实现提取并合并校验逻辑，新增：
+backend/src/agent/set_planning.py
 修改：
-backend/src/agent/tools.py
+backend/src/agent/retrieval.py
 backend/src/repositories/sqlite.py
 改成什么
 改成校验驱动的受控 Reflection：

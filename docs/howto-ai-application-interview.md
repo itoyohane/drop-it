@@ -20,7 +20,7 @@
 5. 生成 Set，打开规则报告，展示调序、确认和导出。
 6. 最后主动说明单用户、线性检索、单 worker、启发式规划和旧前端联调状态。
 
-展示代码时按 `agent/intent → agent/graph/state/commands → agent/tools → repositories/music → worker` 讲：硬路由和 typed command 先固定任务，图节点直接执行三项业务，repository 限制数据访问，music 适配模型，worker 承担长任务。`memory.py` 提供可压缩短期上下文。
+展示代码时按 `agent/graph → agent/retrieval → agent/set_planning → repositories/music → worker` 讲：硬路由、typed command 和图状态先固定任务，检索与 RAG、Set 规划与校验分别在高内聚模块中执行，repository 限制数据访问，music 适配模型，worker 承担长任务。`memory.py` 提供可压缩短期上下文。
 
 ## 高频问题
 

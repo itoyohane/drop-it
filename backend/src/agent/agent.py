@@ -10,15 +10,19 @@ from uuid import uuid4
 from langchain_openai import ChatOpenAI
 
 from backend.agent.checkpoints import AgentCheckpointStore, next_node_for_checkpoint
-from backend.agent.commands import message_text
-from backend.agent.graph import build_graph
-from backend.agent.intent import Intent, IntentRecognizer, IntentResult
+from backend.agent.graph import (
+    AgentRuntimeContext,
+    Intent,
+    IntentRecognizer,
+    IntentResult,
+    build_graph,
+    message_text,
+)
 from backend.agent.memory import ContextCompressor, ShortTermMemory
 from backend.agent.prompts import SYSTEM_PROMPT
-from backend.agent.state import AgentRuntimeContext
-from backend.agent.tools import DropItToolRegistry
+from backend.agent.retrieval import DropItToolRegistry
 from backend.config import Settings
-from backend.models import ChatMessage, Playlist, ToolEvent, ToolResult
+from backend.models import ChatMessage, Playlist, ToolEvent
 from backend.repositories import DropItStore, StaleAgentRunError
 
 
@@ -108,21 +112,17 @@ class DropItAgent:
                 logger.warning("agent_run_claim_lost", extra={"run_id": run_id, "token": token})
                 return
 
-    async def stream_chat(self, project_id: str, conversation_id: str,
-                          text: str, run_id: str | None = None) -> AsyncIterator[dict[str, Any]]:
-        self.require_model()
-        run_id = run_id or uuid4().hex
-        checkpoint_store = AgentCheckpointStore(self.store)
+    async def _load_run(
+        self, run_id: str, project_id: str, conversation_id: str, text: str
+    ) -> tuple[dict[str, Any], IntentResult, bool]:
         run = self.store.get_agent_run(run_id)
-        memory_key = f"{project_id}:{conversation_id}"
         if run is None:
             recognized = await asyncio.to_thread(self.intent.recognize, text)
             run = self.store.create_agent_run(
                 run_id, project_id, conversation_id, self._graph_route(recognized.name), text, []
             )
         else:
-            # Atomic INSERT OR IGNORE + validation happens before any message
-            # write, preventing one explicit run_id from crossing scopes.
+            # Scope/content validation happens before the first message write.
             run = self.store.create_agent_run(
                 run_id, project_id, conversation_id, run["route"], text, run.get("history") or []
             )
@@ -132,6 +132,99 @@ class DropItAgent:
                 guidance="使用持久化 Agent run 恢复执行。",
             )
         resumed = not bool(run.pop("created", False))
+        return run, recognized, resumed
+
+    def _restore_messages(
+        self,
+        project_id: str,
+        conversation_id: str,
+        text: str,
+        run: dict[str, Any],
+        latest: dict[str, Any] | None,
+    ) -> list[dict[str, str]]:
+        memory_key = f"{project_id}:{conversation_id}"
+        resumed_state = latest.get("state", {}) if latest else {}
+        messages = resumed_state.get("history") or run.get("history") or []
+        if not messages:
+            if self.memory.has(memory_key):
+                messages = self.memory.messages(memory_key)
+                if not messages or messages[-1] != {"role": "user", "content": text}:
+                    messages.append({"role": "user", "content": text})
+            else:
+                messages = [
+                    {"role": item.role, "content": item.content}
+                    for item in self.store.list_messages(
+                        project_id, conversation_id, limit=self.memory.max_messages
+                    )
+                ]
+        if not self.memory.has(memory_key):
+            self.memory.seed(memory_key, messages)
+        return messages
+
+    @staticmethod
+    def _initial_state(
+        run_id: str,
+        run: dict[str, Any],
+        text: str,
+        messages: list[dict[str, str]],
+        latest: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        state: dict[str, Any] = {
+            "run_id": run_id,
+            "route": run["route"],
+            "user_text": text,
+            "history": messages,
+            "tool_events": [],
+        }
+        if latest:
+            state.update(latest.get("state", {}))
+            state["run_id"] = run_id
+            state["route"] = run["route"]
+        state["resume_node"] = next_node_for_checkpoint(run["route"], latest)
+        return state
+
+    async def _run_graph(
+        self, initial_state: dict[str, Any], context: AgentRuntimeContext
+    ) -> AsyncIterator[tuple[str, Any]]:
+        final_state: dict[str, Any] = dict(initial_state)
+        emitted_tools: set[str] = set()
+        graph_error: Exception | None = None
+        try:
+            async for update in self.graph.astream(
+                initial_state,
+                context=context,
+                stream_mode=["updates", "custom"],
+                version="v2",
+            ):
+                if isinstance(update, dict) and update.get("type") == "custom":
+                    payload = update.get("data")
+                    if isinstance(payload, dict) and payload.get("type") == "response_token":
+                        content = payload.get("content")
+                        if content:
+                            yield "token", content
+                    continue
+                for _, delta in self._update_entries(update):
+                    final_state.update(delta)
+                    for event in delta.get("tool_events", []):
+                        record = event if isinstance(event, ToolEvent) else ToolEvent.model_validate(event)
+                        identity = record.model_dump_json()
+                        if identity not in emitted_tools:
+                            emitted_tools.add(identity)
+                            yield "tool", record
+        except Exception as exc:
+            graph_error = exc
+            logger.exception("agent_graph_failed")
+        yield "result", (final_state, graph_error)
+
+    async def stream_chat(self, project_id: str, conversation_id: str,
+                          text: str, run_id: str | None = None) -> AsyncIterator[dict[str, Any]]:
+        self.require_model()
+        run_id = run_id or uuid4().hex
+        checkpoint_store = AgentCheckpointStore(self.store)
+        run, recognized, resumed = await self._load_run(
+            run_id, project_id, conversation_id, text
+        )
+        memory_key = f"{project_id}:{conversation_id}"
         owner = uuid4().hex
         claim_token = await self._claim_or_wait(run_id, owner)
         owns_claim = claim_token is not None
@@ -151,20 +244,9 @@ class DropItAgent:
 
             latest = checkpoint_store.latest(run_id)
             already_completed = bool(latest and latest.get("step") == "completed")
-            resumed_state = latest.get("state", {}) if latest else {}
-            messages = resumed_state.get("history") or run.get("history") or []
-            if not messages:
-                if self.memory.has(memory_key):
-                    messages = self.memory.messages(memory_key)
-                    if not messages or messages[-1] != {"role": "user", "content": text}:
-                        messages.append({"role": "user", "content": text})
-                else:
-                    history = self.store.list_messages(
-                        project_id, conversation_id, limit=self.memory.max_messages
-                    )
-                    messages = [{"role": item.role, "content": item.content} for item in history]
-            if not self.memory.has(memory_key):
-                self.memory.seed(memory_key, messages)
+            messages = self._restore_messages(
+                project_id, conversation_id, text, run, latest
+            )
 
             yield {"type": "status", "label": "正在思考", "intent": recognized.name.value,
                    "run_id": run_id, "resumed": resumed}
@@ -183,18 +265,7 @@ class DropItAgent:
             if owns_claim:
                 self.store.set_agent_run_history(run_id, messages, owner, claim_token)
 
-            initial_state = {
-                "run_id": run_id,
-                "route": run["route"],
-                "user_text": text,
-                "history": messages,
-                "tool_events": [],
-            }
-            if latest:
-                initial_state.update(latest.get("state", {}))
-                initial_state["run_id"] = run_id
-                initial_state["route"] = run["route"]
-            initial_state["resume_node"] = next_node_for_checkpoint(run["route"], latest)
+            initial_state = self._initial_state(run_id, run, text, messages, latest)
 
             context = AgentRuntimeContext(
                 project_id=project_id,
@@ -207,33 +278,14 @@ class DropItAgent:
                 claim_token=claim_token,
             )
             final_state: dict[str, Any] = dict(initial_state)
-            emitted_tools: set[str] = set()
             graph_error: Exception | None = None
-            try:
-                async for update in self.graph.astream(
-                    initial_state,
-                    context=context,
-                    stream_mode=["updates", "custom"],
-                    version="v2",
-                ):
-                    if isinstance(update, dict) and update.get("type") == "custom":
-                        payload = update.get("data")
-                        if isinstance(payload, dict) and payload.get("type") == "response_token":
-                            content = payload.get("content")
-                            if content:
-                                yield {"type": "token", "content": content}
-                        continue
-                    for _, delta in self._update_entries(update):
-                        final_state.update(delta)
-                        for event in delta.get("tool_events", []):
-                            record = event if isinstance(event, ToolEvent) else ToolEvent.model_validate(event)
-                            identity = record.model_dump_json()
-                            if identity not in emitted_tools:
-                                emitted_tools.add(identity)
-                                yield {"type": "tool", **record.model_dump()}
-            except Exception as exc:
-                graph_error = exc
-                logger.exception("agent_graph_failed")
+            async for kind, payload in self._run_graph(initial_state, context):
+                if kind == "token":
+                    yield {"type": "token", "content": payload}
+                elif kind == "tool":
+                    yield {"type": "tool", **payload.model_dump()}
+                else:
+                    final_state, graph_error = payload
 
             if isinstance(graph_error, StaleAgentRunError):
                 raise graph_error
@@ -348,13 +400,6 @@ class DropItAgent:
                     },
                 )
         raise RuntimeError("Agent 未返回最终消息")
-
-    @classmethod
-    def _parse_tool_result(cls, value: Any) -> ToolResult:
-        try:
-            return ToolResult.model_validate_json(message_text(value))
-        except ValueError:
-            return ToolResult(ok=False, summary="工具返回了无效结果，请重试。")
 
     @staticmethod
     def _friendly_model_error(exc: Exception) -> str:

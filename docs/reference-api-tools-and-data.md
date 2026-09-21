@@ -3,17 +3,16 @@
 后端入口是 `backend.main:create_app`。开发环境的 OpenAPI 页面位于 `/api/docs`，生产模式关闭。
 除非另行说明，请求和响应均为 JSON；错误使用 FastAPI 的 `{ "detail": "..." }` 格式。
 
-代码入口分别位于 `backend/src/agent/tools.py`、`backend/src/agent/intent.py`、
-`backend/src/agent/memory.py`、`backend/src/agent/state.py`、`backend/src/agent/commands.py`、
-`backend/src/agent/graph.py`、`backend/src/repositories/` 和 `backend/src/workers/analyze_track.py`。
+代码入口分别位于 `backend/src/agent/retrieval.py`、`backend/src/agent/set_planning.py`、
+`backend/src/agent/graph.py`、`backend/src/agent/agent.py`、`backend/src/agent/memory.py`、
+`backend/src/agent/checkpoints.py`、`backend/src/repositories/` 和
+`backend/src/workers/analyze_track.py`。
 
 ## Agent 工具
 
-三个兼容工具都由服务端绑定当前项目，模型不能传入 `project_id`。Agent 图直接调用同一 Registry 的确定性检索、规划和持久化操作；结果统一序列化为：
-
-```json
-{"ok": true, "summary": "找到 3 首曲目。", "data": {"tracks": []}}
-```
+三个业务操作都由服务端绑定当前项目，模型不能传入 `project_id`。Agent 图直接调用
+`retrieval.py` 的项目内检索和 `set_planning.py` 的规划、校验、修复与幂等持久化操作，
+再把结果写入 graph state 和 SSE/tool evidence；HTTP/SSE 契约不变。
 
 ### `search_library`
 
@@ -29,11 +28,12 @@
 
 | 参数 | 类型与默认值 | 说明 |
 | --- | --- | --- |
-| `track_id` | string，必填 | 先由 `search_library` 解析的当前曲库 ID |
+| `reference` | string，必填 | 当前曲库中的精确曲名或 `track_id`；节点先解析引用，再进行相似检索 |
 | `limit` | integer，3，1–100 | 最多返回数，不包含参考歌曲 |
 | `filters` | `MusicFilters | null` | 对候选歌曲的精确条件 |
 
-参考歌没有当前描述向量会失败。输出含 `description_similarity` 与综合 `score`，二者均不是概率。
+曲名重复时必须改用 `track_id` 消除歧义。参考歌没有当前描述向量会失败。输出含
+`description_similarity` 与综合 `score`，二者均不是概率。
 
 ### `generate_dj_set`
 
@@ -45,6 +45,7 @@
 | `energy_curve` | `steady/build/peak/wave`，`build` | 能量曲线 |
 | `style_query` | string，`""` | 可选歌曲描述语义检索条件 |
 | `track_ids` | string list/null，最多 500 | 可选候选白名单，必须全部属于当前项目 |
+| `required_tracks` | string list/null，最多 500 | 必须最终出现在 Set 中的 `track_id`；两轮确定性修复后仍无法满足则返回 `constraint_conflict` |
 
 成功时保存 Playlist，返回 `playlist_id`、规则报告和曲目事实。全局曲库对话不能保存 Set。
 

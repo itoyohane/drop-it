@@ -8,9 +8,10 @@ from pydantic import ValidationError
 import pytest
 
 from backend.agent.agent import DropItAgent
-from backend.agent.commands import GenerateSetCommand, SearchCommand
-from backend.agent.intent import OVERSTEP_RESPONSE, IntentRecognizer
-from backend.agent.tools import DropItToolRegistry
+from backend.agent.graph import (
+    GenerateSetCommand, IntentRecognizer, OVERSTEP_RESPONSE, SearchCommand,
+)
+from backend.agent.retrieval import DropItToolRegistry
 from backend.config import Settings
 from backend.tests.conftest import FakeEmbedder, add_track
 
@@ -214,7 +215,13 @@ def test_project_scope_is_server_selected_for_set_candidates(library):
     add_track(store, other, "outside", [1, 0, 0])
     command = GenerateSetCommand(request="scope", track_ids=["outside"])
     try:
-        registry.retrieve_set_candidates(project.id, command)
+        registry.retrieve_set_candidates(
+            project.id,
+            bpm_min=command.bpm_min,
+            bpm_max=command.bpm_max,
+            style_query=command.style_query,
+            track_ids=command.track_ids,
+        )
     except ValueError as exc:
         assert "当前项目之外" in str(exc)
     else:

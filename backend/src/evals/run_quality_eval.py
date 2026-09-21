@@ -18,10 +18,11 @@ from typing import Any
 
 import numpy as np
 
-from backend.agent.intent import IntentRecognizer, OllamaIntentFallback
-from backend.agent.tools import DropItToolRegistry
+from backend.agent.graph import GenerateSetCommand, IntentRecognizer, OllamaIntentFallback
+from backend.agent.retrieval import DropItToolRegistry
+from backend.agent.set_planning import persist_set, plan_set, validate_and_repair_set
 from backend.config import Settings
-from backend.models import MusicFilters, Playlist, ToolResult, Track
+from backend.models import MusicFilters, MusicMatch, Playlist, ToolResult, Track
 from backend.music.text_models import DashScopeTextEmbedder
 from backend.repositories import GLOBAL_PROJECT_ID, DropItStore
 
@@ -92,6 +93,9 @@ class ReadOnlyEvaluationStore:
         self.playlists[playlist.id] = playlist
         return playlist
 
+    def get_playlist(self, playlist_id: str) -> Playlist | None:
+        return self.playlists.get(playlist_id) or self.source.get_playlist(playlist_id)
+
 
 @dataclass(frozen=True)
 class EvaluationContext:
@@ -116,10 +120,66 @@ def _mean(values: list[float]) -> float:
 
 def _invoke_tool(registry: DropItToolRegistry, project_id: str, name: str,
                  arguments: dict[str, Any]) -> tuple[ToolResult, str | None]:
-    tool = next(item for item in registry.tools_for(project_id) if item.name == name)
     try:
-        raw = tool.invoke(arguments)
-        return ToolResult.model_validate_json(raw), None
+        filters = MusicFilters.model_validate(arguments.get("filters") or {})
+        if name == "search_library":
+            matches = registry.search(
+                project_id, arguments.get("query", ""), filters,
+                k=int(arguments.get("limit", 20)),
+            )
+            return ToolResult(
+                ok=True,
+                summary=f"找到 {len(matches)} 首曲目。",
+                data={"tracks": [match.context() for match in matches]},
+            ), None
+        if name == "find_similar_tracks":
+            reference = arguments.get("reference", arguments.get("track_id", ""))
+            track = registry.resolve_reference(project_id, reference)
+            matches = registry.similar(
+                project_id, track.id, filters,
+                k=int(arguments.get("limit", 3)),
+            )
+            return ToolResult(
+                ok=True,
+                summary=f"找到 {len(matches)} 首相似曲目。",
+                data={"tracks": [match.context() for match in matches]},
+            ), None
+        if name == "generate_dj_set":
+            command = GenerateSetCommand(**arguments)
+            candidates = registry.retrieve_set_candidates(
+                project_id,
+                bpm_min=command.bpm_min,
+                bpm_max=command.bpm_max,
+                style_query=command.style_query,
+                track_ids=command.track_ids,
+            )
+            playlist = plan_set(
+                project_id,
+                candidates,
+                request=command.request,
+                duration_min=command.duration_min,
+                bpm_min=command.bpm_min,
+                bpm_max=command.bpm_max,
+                energy_curve=command.energy_curve,
+                style_query=command.style_query,
+            )
+            playlist, _, _ = validate_and_repair_set(
+                playlist, candidates, required_tracks=command.required_tracks
+            )
+            persisted = persist_set(registry.store, project_id, playlist)
+            return ToolResult(
+                ok=True,
+                summary=f"已生成 {len(persisted.tracks)} 首、约 {persisted.duration_sec // 60} 分钟的 Set。",
+                data={
+                    "playlist_id": persisted.id,
+                    "report": persisted.report,
+                    "tracks": [
+                        {**MusicMatch(track=row.track).context(), "reason": row.reason}
+                        for row in persisted.tracks
+                    ],
+                },
+            ), None
+        raise ValueError(f"unknown tool: {name}")
     except Exception as exc:  # schema/runtime failures are part of the metric
         return ToolResult(ok=False, summary=f"{type(exc).__name__}: {exc}"), type(exc).__name__
 

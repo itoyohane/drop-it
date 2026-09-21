@@ -12,7 +12,6 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from backend.agent.commands import GenerateSetCommand, SearchCommand, SimilarCommand
 from backend.models import MusicMatch, Playlist, ToolEvent, Track
 
 
@@ -53,6 +52,10 @@ def hydrate_state(value: dict[str, Any] | str | None) -> dict[str, Any]:
     if value is None:
         return {}
     data = json.loads(value) if isinstance(value, str) else dict(value)
+    # Imported lazily because graph.py owns these input types and imports this
+    # checkpoint adapter for durable restart semantics.
+    from backend.agent.graph import GenerateSetCommand, SearchCommand, SimilarCommand
+
     route = data.get("route")
     command = data.get("command")
     command_type = {

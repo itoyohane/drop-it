@@ -10,8 +10,8 @@
 
 ## 怎么解决
 
-在 `intent.py` 新增显式 `music_chat` 规则：纯数字、符号和常见寒暄直接进入无工具路由；Ollama 无效分类也继续降级到该路由。Agent 保持统一执行流程，仅按路由结果绑定工具；通用 Prompt 改为条件化描述工具，并禁止输出 DSML 等内部协议。
+在 `graph.py` 的 intent routing 区新增显式 `music_chat` 规则：纯数字、符号和常见寒暄直接进入无工具路由；Ollama 无效分类也继续降级到该路由。Agent 保持统一执行流程；通用 Prompt 改为条件化描述工具，并禁止输出 DSML 等内部协议。
 
 ## 验证与复盘
 
-回归测试覆盖 `111` 不调用 Ollama、无效 Ollama 输出降级以及 `music_chat` 不绑定工具，并检查 Prompt 不再声称始终拥有工具。关键实现见 `backend/src/agent/intent.py`，测试见 `backend/src/tests/test_intent_memory.py` 和 `backend/src/tests/test_services.py`。
+回归测试覆盖 `111` 不调用 Ollama、无效 Ollama 输出降级以及 `music_chat` 不绑定工具，并检查 Prompt 不再声称始终拥有工具。关键实现见 `backend/src/agent/graph.py`，测试见 `backend/src/tests/test_intent_memory.py` 和 `backend/src/tests/test_services.py`。

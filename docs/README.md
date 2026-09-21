@@ -1,6 +1,6 @@
 # DropIt 文档
 
-以当前工作区的后端代码为准：一个直接编译的 LangGraph StateGraph，三个兼容音乐 Tool，librosa 分析，DeepSeek + DashScope 歌曲描述 RAG，SQLite 元数据与 Chroma 向量持久化。
+以当前工作区的后端代码为准：一个直接编译的 LangGraph StateGraph，三个受控音乐业务操作，librosa 分析，DeepSeek + DashScope 歌曲描述 RAG，SQLite 元数据与 Chroma 向量持久化。
 
 ## 阅读顺序
 

@@ -6,7 +6,7 @@ DropIt 把自然语言音乐需求转换为当前曲库内可核实的歌曲、�
 
 导入链路不经过聊天模型：上传音频 → Mutagen 标签与 SHA-256 去重 → SQLite Job → librosa 提取 BPM、节拍、调性、Camelot、能量和频谱特征 → DeepSeek-V4.1-Flash 把测量特征整理成歌曲文本描述 → DashScope `qwen3.7-text-embedding` 编码描述 → Chroma 持久化向量。
 
-对话链路：`intent.py` 先执行规则识别、规则未命中时调用 Ollama → `overstep` 直接拒答，其他意图进入带 30 分钟 TTL 的短期记忆 → 上下文估算达到窗口 80% 时压缩旧消息 → 每个 `DropItAgent` 实例预先编译一个 LangGraph `StateGraph` → 条件边选择显式分支 → 模型只负责路由对应的 typed command 提取和最终自然语言回答 → 本地节点完成检索、参考歌解析、Set 规划与一次持久化 → SSE 输出并持久化完整消息。
+对话链路：`graph.py` 先执行规则识别、规则未命中时调用 Ollama → `overstep` 直接拒答，其他意图进入带 30 分钟 TTL 的短期记忆 → 上下文估算达到窗口 80% 时压缩旧消息 → 每个 `DropItAgent` 实例预先编译一个 LangGraph `StateGraph` → 条件边选择显式分支 → 模型只负责路由对应的 typed command 提取和最终自然语言回答 → 本地节点完成检索、参考歌解析、Set 规划与一次持久化 → SSE 输出并持久化完整消息。
 
 P0 item 1 的图分支是：
 
@@ -30,7 +30,7 @@ backend/
   src/
     main.py, config.py, models.py, audio.py
     agent/
-      agent.py, intent.py, memory.py, prompts.py, state.py, commands.py, graph.py, tools.py
+      agent.py, graph.py, retrieval.py, set_planning.py, memory.py, prompts.py, checkpoints.py
     music/
       librosa_analyzer.py, text_models.py, indexer.py, download_models.py
     repositories/
@@ -41,18 +41,17 @@ backend/
     tests/
 ```
 
-项目不再设置 `services/` 层。`agent/tools.py` 直接包含曲库过滤、描述向量检索、相似度重排、Set 规划和导出，避免三项工具在多层门面间跳转。Worker 直接编排分析、描述和索引；Repository 仍集中约束 SQL 与项目成员关系。
+项目不再设置 `services/` 层。`agent/retrieval.py` 聚合曲库过滤、描述向量检索、参考歌解析、相似度重排和 Set 候选获取；`agent/set_planning.py` 聚合 Set 规划、Camelot/energy、校验、修复、写入前校验与幂等持久化、以及导出。相关函数按高内聚合并，避免为了分层增加门面跳转。Worker 直接编排分析、描述和索引；Repository 仍集中约束 SQL 与项目成员关系。
 
 | 模块 | 职责 |
 | --- | --- |
 | [main.py](../backend/src/main.py) | FastAPI、依赖装配、HTTP/SSE、导入和管理接口 |
 | [agent/agent.py](../backend/src/agent/agent.py) | Agent API facade、意图与记忆接入、图执行、工具事件转换 |
-| [agent/state.py](../backend/src/agent/state.py) | 原始结构化图状态与 server-only runtime context |
-| [agent/commands.py](../backend/src/agent/commands.py) | 路由专属 Pydantic command 提取与校验 |
-| [agent/graph.py](../backend/src/agent/graph.py) | 一次编译的 StateGraph、条件边和确定性节点 |
-| [agent/intent.py](../backend/src/agent/intent.py) | 规则优先、Ollama 兜底的五路意图识别与超纲拒答 |
+| [agent/graph.py](../backend/src/agent/graph.py) | graph state、typed command、规则/Ollama intent、StateGraph 条件边和确定性节点 |
 | [agent/memory.py](../backend/src/agent/memory.py) | 会话隔离、自动过期、token 估算与 80% 阈值上下文压缩 |
-| [agent/tools.py](../backend/src/agent/tools.py) | 三个兼容 Tool 及检索、规划、持久化直接操作 |
+| [agent/retrieval.py](../backend/src/agent/retrieval.py) | 项目范围曲库过滤、RAG 检索、参考歌解析、相似度和 Set 候选获取 |
+| [agent/set_planning.py](../backend/src/agent/set_planning.py) | Set 规划、Camelot/energy、结构化校验、确定性修复、写入前校验与幂等持久化、导出算法 |
+| [agent/checkpoints.py](../backend/src/agent/checkpoints.py) | SQLite checkpoint 序列化、恢复路由和版本幂等语义 |
 | [music/librosa_analyzer.py](../backend/music/librosa_analyzer.py) | DJ 数值特征和描述模型输入特征 |
 | [music/text_models.py](../backend/music/text_models.py) | DeepSeek 歌曲描述与 DashScope 文本 embedding API 客户端 |
 | [workers/analyze_track.py](../backend/workers/analyze_track.py) | 持久化任务、阶段重试和错误隔离 |

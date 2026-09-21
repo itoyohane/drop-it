@@ -1,6 +1,9 @@
 # DropIt 七轮质量评测报告
 
 > 生成时间：`2026-09-12T13:22:15.791196+00:00`。原始逐用例结果见 [quality-eval-7-rounds.json](quality-eval-7-rounds.json)。
+> 这是重构前的历史评测快照；其中 `ToolResult`、LangChain Tool schema 和 `track_id`
+> 参数记录当时的评测适配器，不代表当前 Graph 命令契约。当前契约以
+> [API、Tool 与数据参考](reference-api-tools-and-data.md) 为准。
 
 ## 最终指标
 
