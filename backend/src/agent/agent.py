@@ -9,16 +9,17 @@ from uuid import uuid4
 
 from langchain_openai import ChatOpenAI
 
+from backend.agent.checkpoints import AgentCheckpointStore, next_node_for_checkpoint
 from backend.agent.commands import message_text
 from backend.agent.graph import build_graph
-from backend.agent.intent import Intent, IntentRecognizer
+from backend.agent.intent import Intent, IntentRecognizer, IntentResult
 from backend.agent.memory import ContextCompressor, ShortTermMemory
 from backend.agent.prompts import SYSTEM_PROMPT
 from backend.agent.state import AgentRuntimeContext
 from backend.agent.tools import DropItToolRegistry
 from backend.config import Settings
 from backend.models import ChatMessage, Playlist, ToolEvent, ToolResult
-from backend.repositories import DropItStore
+from backend.repositories import DropItStore, StaleAgentRunError
 
 
 logger = logging.getLogger(__name__)
@@ -70,6 +71,10 @@ class DropItAgent:
         return "reject" if intent == Intent.OVERSTEP else intent.value
 
     @staticmethod
+    def _intent_for_route(route: str) -> Intent:
+        return Intent.OVERSTEP if route == "reject" else Intent(route)
+
+    @staticmethod
     def _update_entries(update: Any) -> list[tuple[str, dict[str, Any]]]:
         """Normalize both LangGraph v1 updates and v2 update envelopes."""
 
@@ -79,110 +84,211 @@ class DropItAgent:
             update = update["data"]
         return [(str(name), value) for name, value in update.items() if isinstance(value, dict)]
 
+    async def _claim_or_wait(self, run_id: str, owner: str) -> int | None:
+        """Claim one run atomically, or wait for the current owner to complete."""
+
+        lease = self.settings.agent_run_lease_seconds
+        deadline = asyncio.get_running_loop().time() + max(30.0, lease * 3)
+        while asyncio.get_running_loop().time() < deadline:
+            token = self.store.claim_agent_run(run_id, owner, lease_seconds=lease)
+            if token is not None:
+                return token
+            run = self.store.get_agent_run(run_id)
+            if run and run.get("status") == "completed":
+                return None
+            await asyncio.sleep(min(.05, max(.01, lease / 10)))
+        raise TimeoutError("等待相同 run_id 的 Agent 任务完成超时")
+
+    async def _heartbeat(self, run_id: str, owner: str, token: int) -> None:
+        lease = self.settings.agent_run_lease_seconds
+        interval = min(5.0, max(.01, lease / 3))
+        while True:
+            await asyncio.sleep(interval)
+            if not self.store.renew_agent_run(run_id, owner, token, lease_seconds=lease):
+                logger.warning("agent_run_claim_lost", extra={"run_id": run_id, "token": token})
+                return
+
     async def stream_chat(self, project_id: str, conversation_id: str,
-                          text: str) -> AsyncIterator[dict[str, Any]]:
+                          text: str, run_id: str | None = None) -> AsyncIterator[dict[str, Any]]:
         self.require_model()
-        user = self.store.add_message(project_id, conversation_id, "user", text)
-        yield {"type": "user_saved", "message": user.model_dump(mode="json")}
-
-        # IntentRecognizer remains the hard route/guard. The graph receives only
-        # the resulting route; it cannot reinterpret an overstep as a tool route.
-        recognized = await asyncio.to_thread(self.intent.recognize, text)
-        yield {"type": "status", "label": "正在思考", "intent": recognized.name.value}
-
+        run_id = run_id or uuid4().hex
+        checkpoint_store = AgentCheckpointStore(self.store)
+        run = self.store.get_agent_run(run_id)
         memory_key = f"{project_id}:{conversation_id}"
-        if not self.memory.has(memory_key):
-            history = self.store.list_messages(
-                project_id, conversation_id, limit=self.memory.max_messages
+        if run is None:
+            recognized = await asyncio.to_thread(self.intent.recognize, text)
+            run = self.store.create_agent_run(
+                run_id, project_id, conversation_id, self._graph_route(recognized.name), text, []
             )
-            self.memory.seed(memory_key, (
-                {"role": item.role, "content": item.content} for item in history
-            ))
         else:
-            self.memory.remember(memory_key, "user", text)
-        messages = self.memory.messages(memory_key)
-
-        active_prompt = (
-            SYSTEM_PROMPT
-            + f"\nCurrent intent hint: {recognized.name.value} "
-            + f"(confidence {recognized.confidence:.2f}). {recognized.guidance}"
+            # Atomic INSERT OR IGNORE + validation happens before any message
+            # write, preventing one explicit run_id from crossing scopes.
+            run = self.store.create_agent_run(
+                run_id, project_id, conversation_id, run["route"], text, run.get("history") or []
+            )
+            recognized = IntentResult(
+                name=self._intent_for_route(run["route"]),
+                confidence=1.0,
+                guidance="使用持久化 Agent run 恢复执行。",
+            )
+        resumed = not bool(run.pop("created", False))
+        owner = uuid4().hex
+        claim_token = await self._claim_or_wait(run_id, owner)
+        owns_claim = claim_token is not None
+        heartbeat_task = (
+            asyncio.create_task(self._heartbeat(run_id, owner, claim_token))
+            if claim_token is not None else None
         )
-        if recognized.name != Intent.OVERSTEP and self.context_compressor.should_compact(messages, active_prompt):
-            yield {"type": "status", "label": "正在压缩上下文",
-                   "intent": recognized.name.value}
-            messages = await self._compact_context(memory_key, messages, active_prompt)
-            yield {"type": "status", "label": "正在思考",
-                   "intent": recognized.name.value}
 
-        initial_state = {
-            "run_id": uuid4().hex,
-            "route": self._graph_route(recognized.name),
-            "user_text": text,
-            "history": messages,
-            "tool_events": [],
-        }
-        context = AgentRuntimeContext(
-            project_id=project_id,
-            conversation_id=conversation_id,
-            store=self.store,
-            registry=self.registry,
-            model_factory=self._chat_model,
-        )
-        final_state: dict[str, Any] = dict(initial_state)
-        emitted_tools: set[str] = set()
-        graph_error: Exception | None = None
         try:
-            async for update in self.graph.astream(
-                initial_state,
-                context=context,
-                stream_mode=["updates", "custom"],
-                version="v2",
-            ):
-                if isinstance(update, dict) and update.get("type") == "custom":
-                    payload = update.get("data")
-                    if isinstance(payload, dict) and payload.get("type") == "response_token":
-                        content = payload.get("content")
-                        if content:
-                            yield {"type": "token", "content": content}
-                    continue
-                for _, delta in self._update_entries(update):
-                    final_state.update(delta)
-                    for event in delta.get("tool_events", []):
-                        record = event if isinstance(event, ToolEvent) else ToolEvent.model_validate(event)
-                        identity = record.model_dump_json()
-                        if identity not in emitted_tools:
-                            emitted_tools.add(identity)
-                            yield {"type": "tool", **record.model_dump()}
-        except Exception as exc:
-            graph_error = exc
-            logger.exception("agent_graph_failed")
+            # The run now exists and its scope has been checked.  Message reuse
+            # performs the same scope/content validation in the repository.
+            user = self.store.add_message(
+                project_id, conversation_id, "user", text, agent_run_id=run_id,
+                agent_owner=owner, agent_token=claim_token,
+            )
+            yield {"type": "user_saved", "message": user.model_dump(mode="json"), "run_id": run_id}
 
-        if graph_error is not None:
-            content = self._friendly_model_error(graph_error)
-            final_state["final_response"] = content
-            final_state["error_code"] = "graph_failed"
-            final_state["error_detail"] = content
-            yield {"type": "error", "detail": content}
-        elif final_state.get("error_code") and final_state.get("error_detail"):
-            yield {"type": "error", "detail": final_state["error_detail"]}
+            latest = checkpoint_store.latest(run_id)
+            already_completed = bool(latest and latest.get("step") == "completed")
+            resumed_state = latest.get("state", {}) if latest else {}
+            messages = resumed_state.get("history") or run.get("history") or []
+            if not messages:
+                if self.memory.has(memory_key):
+                    messages = self.memory.messages(memory_key)
+                    if not messages or messages[-1] != {"role": "user", "content": text}:
+                        messages.append({"role": "user", "content": text})
+                else:
+                    history = self.store.list_messages(
+                        project_id, conversation_id, limit=self.memory.max_messages
+                    )
+                    messages = [{"role": item.role, "content": item.content} for item in history]
+            if not self.memory.has(memory_key):
+                self.memory.seed(memory_key, messages)
 
-        content = (final_state.get("final_response") or "").strip() or "未收到有效回答，请重试。"
-        tool_events = [
-            event if isinstance(event, ToolEvent) else ToolEvent.model_validate(event)
-            for event in final_state.get("tool_events", [])
-        ]
-        playlist = final_state.get("playlist")
-        if playlist is not None and not isinstance(playlist, Playlist):
-            playlist = Playlist.model_validate(playlist)
-        if playlist is not None and playlist.project_id != project_id:
-            logger.error("graph_returned_out_of_scope_playlist", extra={"project_id": project_id})
-            playlist = None
-        message = self.store.add_message(
-            project_id, conversation_id, "assistant", content, tool_events
-        )
-        self.memory.remember(memory_key, "assistant", content)
-        yield {"type": "complete", "message": message.model_dump(mode="json"),
-               "playlist": playlist.model_dump(mode="json") if playlist else None}
+            yield {"type": "status", "label": "正在思考", "intent": recognized.name.value,
+                   "run_id": run_id, "resumed": resumed}
+            active_prompt = (
+                SYSTEM_PROMPT
+                + f"\nCurrent intent hint: {recognized.name.value} "
+                + f"(confidence {recognized.confidence:.2f}). {recognized.guidance}"
+            )
+            if (not resumed and recognized.name != Intent.OVERSTEP
+                    and self.context_compressor.should_compact(messages, active_prompt)):
+                yield {"type": "status", "label": "正在压缩上下文",
+                       "intent": recognized.name.value, "run_id": run_id}
+                messages = await self._compact_context(memory_key, messages, active_prompt)
+                yield {"type": "status", "label": "正在思考",
+                       "intent": recognized.name.value, "run_id": run_id}
+            if owns_claim:
+                self.store.set_agent_run_history(run_id, messages, owner, claim_token)
+
+            initial_state = {
+                "run_id": run_id,
+                "route": run["route"],
+                "user_text": text,
+                "history": messages,
+                "tool_events": [],
+            }
+            if latest:
+                initial_state.update(latest.get("state", {}))
+                initial_state["run_id"] = run_id
+                initial_state["route"] = run["route"]
+            initial_state["resume_node"] = next_node_for_checkpoint(run["route"], latest)
+
+            context = AgentRuntimeContext(
+                project_id=project_id,
+                conversation_id=conversation_id,
+                store=self.store,
+                registry=self.registry,
+                model_factory=self._chat_model,
+                run_id=run_id,
+                claim_owner=owner if owns_claim else None,
+                claim_token=claim_token,
+            )
+            final_state: dict[str, Any] = dict(initial_state)
+            emitted_tools: set[str] = set()
+            graph_error: Exception | None = None
+            try:
+                async for update in self.graph.astream(
+                    initial_state,
+                    context=context,
+                    stream_mode=["updates", "custom"],
+                    version="v2",
+                ):
+                    if isinstance(update, dict) and update.get("type") == "custom":
+                        payload = update.get("data")
+                        if isinstance(payload, dict) and payload.get("type") == "response_token":
+                            content = payload.get("content")
+                            if content:
+                                yield {"type": "token", "content": content}
+                        continue
+                    for _, delta in self._update_entries(update):
+                        final_state.update(delta)
+                        for event in delta.get("tool_events", []):
+                            record = event if isinstance(event, ToolEvent) else ToolEvent.model_validate(event)
+                            identity = record.model_dump_json()
+                            if identity not in emitted_tools:
+                                emitted_tools.add(identity)
+                                yield {"type": "tool", **record.model_dump()}
+            except Exception as exc:
+                graph_error = exc
+                logger.exception("agent_graph_failed")
+
+            if isinstance(graph_error, StaleAgentRunError):
+                raise graph_error
+
+            if graph_error is not None:
+                content = self._friendly_model_error(graph_error)
+                final_state["final_response"] = content
+                final_state["error_code"] = "graph_failed"
+                final_state["error_detail"] = content
+                yield {"type": "error", "detail": content, "error_code": "graph_failed",
+                       "run_id": run_id}
+                if owns_claim:
+                    self.store.update_agent_run(
+                        run_id, owner=owner, token=claim_token,
+                        status="failed", error_code="graph_failed",
+                    )
+            elif final_state.get("error_code") and final_state.get("error_detail"):
+                yield {"type": "error", "detail": final_state["error_detail"],
+                       "error_code": final_state["error_code"], "run_id": run_id}
+
+            content = (final_state.get("final_response") or "").strip() or "未收到有效回答，请重试。"
+            tool_events = [
+                event if isinstance(event, ToolEvent) else ToolEvent.model_validate(event)
+                for event in final_state.get("tool_events", [])
+            ]
+            playlist = final_state.get("playlist")
+            if playlist is not None and not isinstance(playlist, Playlist):
+                playlist = Playlist.model_validate(playlist)
+            if (final_state.get("error_code") or not final_state.get("playlist_persisted")
+                    or (playlist is not None and playlist.project_id != project_id)):
+                playlist = None
+            message = self.store.add_message(
+                project_id, conversation_id, "assistant", content, tool_events, run_id,
+                owner, claim_token,
+            )
+            if owns_claim and not already_completed:
+                self.memory.remember(memory_key, "assistant", content)
+            if graph_error is None and owns_claim:
+                self.store.update_agent_run(
+                    run_id, owner=owner, token=claim_token,
+                    status="completed", error_code=final_state.get("error_code"),
+                )
+            yield {"type": "complete", "message": message.model_dump(mode="json"),
+                   "playlist": playlist.model_dump(mode="json") if playlist else None,
+                   "run_id": run_id, "resumed": resumed,
+                   "error_code": final_state.get("error_code")}
+        finally:
+            if heartbeat_task is not None:
+                heartbeat_task.cancel()
+                try:
+                    await heartbeat_task
+                except asyncio.CancelledError:
+                    pass
+            if owns_claim:
+                self.store.release_agent_run(run_id, owner, claim_token)
 
     def forget(self, project_id: str, conversation_id: str) -> None:
         self.memory.forget(f"{project_id}:{conversation_id}")
@@ -218,12 +324,28 @@ class DropItAgent:
         return compacted
 
     async def chat(self, project_id: str, conversation_id: str,
-                   text: str) -> tuple[ChatMessage, Playlist | None]:
-        async for event in self.stream_chat(project_id, conversation_id, text):
+                   text: str, run_id: str | None = None) -> tuple[ChatMessage, Playlist | None]:
+        message, playlist, _ = await self.chat_with_metadata(
+            project_id, conversation_id, text, run_id
+        )
+        return message, playlist
+
+    async def chat_with_metadata(
+        self, project_id: str, conversation_id: str, text: str,
+        run_id: str | None = None,
+    ) -> tuple[ChatMessage, Playlist | None, dict[str, Any]]:
+        """Return the legacy result plus optional run metadata for HTTP clients."""
+
+        async for event in self.stream_chat(project_id, conversation_id, text, run_id):
             if event["type"] == "complete":
                 return (
                     ChatMessage.model_validate(event["message"]),
                     Playlist.model_validate(event["playlist"]) if event["playlist"] else None,
+                    {
+                        "run_id": event.get("run_id"),
+                        "resumed": event.get("resumed"),
+                        "error_code": event.get("error_code"),
+                    },
                 )
         raise RuntimeError("Agent 未返回最终消息")
 

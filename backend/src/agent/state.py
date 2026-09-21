@@ -31,6 +31,7 @@ class AgentState(TypedDict, total=False):
 
     run_id: str
     route: AgentRoute
+    resume_node: str
     user_text: str
     history: list[dict[str, str]]
     command: CommandPayload | None
@@ -40,6 +41,10 @@ class AgentState(TypedDict, total=False):
     candidate_tracks: list[Track]
     candidate_track_ids: list[str]
     playlist: Playlist | None
+    validation: dict[str, Any] | None
+    repair_attempts: int
+    repaired_issue_codes: list[str]
+    playlist_persisted: bool
     tool_events: list[ToolEvent]
     final_response: str
     error_code: str | None
@@ -55,3 +60,6 @@ class AgentRuntimeContext:
     store: DropItStore
     registry: DropItToolRegistry
     model_factory: Callable[[], Any]
+    run_id: str | None = None
+    claim_owner: str | None = None
+    claim_token: int | None = None

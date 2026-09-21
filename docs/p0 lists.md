@@ -1,7 +1,7 @@
 P0 To-Be-Solved List
 1. Agent 执行过程不显式
 - 已完成（P0 item 1）
-现在是什么
+完成前问题
 此前主要依赖 create_agent 让模型自行选择工具。
 要改什么
 修改：
@@ -49,14 +49,14 @@ class AgentState(TypedDict):
 预计时间
 实现日期：2026-09-20。
 2. Set 校验失败后仍然会返回结果
-- 待解决
-现在是什么
-[tools.py (line 205)](../backend/src/agent/tools.py:205) 已经计算：
+- 已完成（P0 item 2）
+完成前问题
+[tools.py (line 205)](../backend/src/agent/tools.py:205) 当时已经计算：
 - BPM 大跳跃
 - Camelot 不兼容
 - 时长误差
 但即使 Transition Rules 状态为 failed，Playlist 仍会被返回和保存。
-当前流程是：
+当时流程是：
 生成 Set → 记录失败信息 → 仍然保存
 要改什么
 从 tools.py 提取校验逻辑，新增：
@@ -64,7 +64,7 @@ backend/src/agent/set_validation.py
 backend/src/agent/set_repair.py
 修改：
 backend/src/agent/tools.py
-backend/repositories/sqlite.py
+backend/src/repositories/sqlite.py
 改成什么
 改成校验驱动的受控 Reflection：
 生成 Set
@@ -114,11 +114,11 @@ required_tracks
 - 相同输入和曲库产生确定性结果。
 - 无法满足时不静默放宽用户限制。
 预计时间
-1～1.5 天。
+实现日期：2026-09-21。
 3. 长链路任务不能从中间恢复
-- 待解决
-现在是什么
-音频分析任务可以在服务重启后重新排队，但 Agent 对话任务没有节点级 Checkpoint。
+- 已完成（P0 item 3）
+完成前问题
+音频分析任务可以在服务重启后重新排队，但 Agent 对话任务当时没有节点级 Checkpoint。
 如果 Set 生成在最后一步失败，可能需要重新：
 - 解析请求
 - 检索候选
@@ -128,8 +128,9 @@ required_tracks
 在 LangGraph 执行链路中增加 Checkpoint。
 新增或扩展：
 backend/src/agent/checkpoints.py
-backend/repositories/sqlite.py
-backend/migrations/009_agent_runs.sql
+backend/src/repositories/sqlite.py
+backend/src/migrations/009_agent_runs.sql
+backend/src/migrations/010_agent_run_claims.sql
 改成什么
 保存节点状态：
 command_parsed
@@ -161,7 +162,7 @@ completed
 - 重试不会生成多个 Playlist。
 - Checkpoint 数据能够用于调试。
 预计时间
-1 天。
+实现日期：2026-09-21。
 4. 评测没有覆盖完整任务、效率和成本
 - 待解决
 现在是什么
@@ -289,4 +290,4 @@ Long-term Preference Memory
 4. Eval 2.0 与 Run Trace
 5. 三层 Memory
 总工期：约 6～8 个专注工作日。
-下一步：在 docs/P0-TO-BE-SOLVED.md 中创建这 5 个复选项，先只实施第 1 项的 state.py、commands.py 和 Graph 空节点。
+当前进度：第 1～3 项已完成；下一步按顺序处理第 4 项 Eval 2.0 与 Run Trace。
