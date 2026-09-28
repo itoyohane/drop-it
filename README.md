@@ -9,7 +9,7 @@ Agent 只调用三个工具：`search_library`、`find_similar_tracks`、`genera
 
 文档入口：[docs](docs/README.md)。
 
-- [运行与验证](docs/tutorial-run-and-observe.md)：安装、模型下载、导入、对话和故障排查。
+- [运行与验证](docs/tutorial-run-and-observe.md)：安装、模型配置、导入、对话和故障排查。
 - [架构与边界](docs/explanation-agent-architecture.md)：模块职责、音乐 RAG、数据范围和取舍。
 - [接口与配置](docs/reference-api-tools-and-data.md)：三个 Tool、HTTP/SSE、数据与环境变量。
 - [项目讲解](docs/howto-ai-application-interview.md)：演示顺序、设计理由和测试边界。
@@ -19,7 +19,7 @@ Agent 只调用三个工具：`search_library`、`find_similar_tracks`、`genera
 在仓库根目录安装 Python 与 Node 依赖，然后用一个命令同时启动 FastAPI 和 Vite：
 
 ```powershell
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-audio.txt
 npm.cmd install
 npm.cmd run dev
 ```
@@ -60,14 +60,16 @@ docker compose -f compose.backend.yaml up
 启动后访问 `http://127.0.0.1:8765/api/docs`。配置 `DEEPSEEK_API_KEY` 后可使用 Agent 对话，
 配置 `DASHSCOPE_API_KEY` 后才能建立/查询歌曲描述向量；缺少任一密钥时，曲库管理和 librosa 数值分析仍可用。
 
-`backend/src/agent/tools.py` 直接实现三个兼容 Tool 及其确定性业务操作；`services/` 已删除。`intent.py` 负责规则优先、
-Ollama 兜底的意图识别与 `overstep` 拒答路由；`graph.py` 用显式分支完成检索、规划、持久化和终止；`memory.py` 提供带 TTL 的短期记忆和 80% 阈值上下文压缩。
+当前使用单个 LangGraph：`graph.py` 集中定义意图、命令、状态与显式分支；`agent.py` 管理对话与运行生命周期；
+`retrieval.py` 负责范围内检索；`set_planning.py` 合并编排、校验、有限修复、保存与导出；
+`memory.py` 管理活动历史和压缩策略，`checkpoints.py` 处理持久步骤与恢复映射。旧的 tools.py、intent.py 和 services 分层已移除。
+从[学习路线](docs/README.md)开始，可沿一次请求读源码，并练习有证据的面试讲解。
 
 ```bash
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-audio.txt
 npm.cmd test
 ```
 
-当前工作区正在从 `backend/` 迁移到 `backend/src/`；根目录的 `backend/__init__.py` 保留
+当前源码位于 `backend/src/`；根目录的 `backend/__init__.py` 保留
 `backend.*` 导入和 `python -m backend...` 入口。显式指定工作区临时目录并关闭 pytest cache，
 可避免受限 Windows 环境把临时文件写到工作区外。
