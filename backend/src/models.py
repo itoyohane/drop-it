@@ -1,4 +1,5 @@
 from datetime import datetime
+import hashlib
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -102,6 +103,10 @@ class AgentEvent(BaseModel):
 class Playlist(BaseModel):
     id: str
     project_id: str
+    # Set only for playlists durably produced by an Agent run.  The database
+    # also stores this value separately so a run can be recovered without
+    # treating the client supplied run_id as a playlist primary key.
+    agent_run_id: str | None = None
     brief: Brief
     tracks: list[PlaylistTrack]
     duration_sec: int
@@ -112,8 +117,20 @@ class Playlist(BaseModel):
     created_at: datetime | None = None
 
 
+def derive_agent_playlist_id(project_id: str, run_id: str) -> str:
+    """Return the stable, project-scoped id for an Agent-produced playlist."""
+
+    project = project_id.encode("utf-8")
+    run = run_id.encode("utf-8")
+    canonical = len(project).to_bytes(8, "big") + project + len(run).to_bytes(8, "big") + run
+    return f"agent-{hashlib.sha256(canonical).hexdigest()}"
+
+
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
+    # Optional client-supplied id makes SSE retries and service-restart resume
+    # explicit while keeping the existing request shape valid.
+    run_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class AnalyzeRequest(BaseModel):
@@ -149,6 +166,9 @@ class ChatResponse(BaseModel):
     message: ChatMessage
     playlist: Playlist | None = None
     model_configured: bool
+    run_id: str | None = None
+    resumed: bool | None = None
+    error_code: str | None = None
 
 
 class Job(BaseModel):

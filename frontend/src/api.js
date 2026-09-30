@@ -1,6 +1,17 @@
+import { createSseParser } from "./chatStream.mjs";
+
 // Use one same-origin API path in every environment. Vite proxies this path in development,
 // while FastAPI serves it directly in production; the browser never has to reach a loopback host.
 const API = "/api";
+
+async function responseError(response, fallback) {
+  const payload = await response.json().catch(() => ({}));
+  const requestId = response.headers.get("x-request-id");
+  const detail = payload.detail || `${fallback}（${response.status}）`;
+  const error = new Error(requestId ? `${detail}（请求编号：${requestId}）` : detail);
+  error.status = response.status;
+  return error;
+}
 
 async function request(path, options = {}) {
   // Multipart bodies set their own boundary; forcing JSON here would break audio imports.
@@ -9,71 +20,41 @@ async function request(path, options = {}) {
     : { "Content-Type": "application/json", ...options.headers };
   const response = await fetch(`${API}${path}`, { headers, ...options });
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    const requestId = response.headers.get("x-request-id");
-    const detail = payload.detail || `请求失败（${response.status}）`;
-    const error = new Error(requestId ? `${detail}（请求编号：${requestId}）` : detail);
-    error.status = response.status;
-    throw error;
+    throw await responseError(response, "请求失败");
   }
   if (response.status === 204) return null;
   const type = response.headers.get("content-type") || "";
   return type.includes("application/json") ? response.json() : response.text();
 }
 
-async function streamChat(projectId, conversationId, message, onEvent, signal) {
-  const response = await fetch(
-    `${API}/projects/${projectId}/conversations/${conversationId}/chat/stream`,
-    { method: "POST", signal, headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }) },
-  );
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.detail || `对话请求失败（${response.status}）`);
-  }
-  if (!response.body) throw new Error("浏览器不支持流式响应");
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  while (true) {
-    const { value, done } = await reader.read();
-    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-    // Network chunks do not align with SSE frames, so retain the incomplete tail for the next read.
-    const frames = buffer.split("\n\n");
-    buffer = frames.pop() || "";
-    for (const frame of frames) {
-      const line = frame.split("\n").find((item) => item.startsWith("data: "));
-      if (line) onEvent(JSON.parse(line.slice(6)));
-    }
-    if (done) break;
-  }
-}
-
-async function streamGlobalChat(conversationId, message, onEvent, signal) {
-  const response = await fetch(`${API}/chat/conversations/${conversationId}/chat/stream`, {
+async function stream(path, message, onEvent, signal, fallback) {
+  const response = await fetch(`${API}${path}`, {
     method: "POST", signal, headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message }),
   });
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.detail || `普通对话请求失败（${response.status}）`);
+    throw await responseError(response, fallback);
   }
   if (!response.body) throw new Error("浏览器不支持流式响应");
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let buffer = "";
+  const parser = createSseParser(onEvent);
   while (true) {
     const { value, done } = await reader.read();
-    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-    const frames = buffer.split("\n\n");
-    buffer = frames.pop() || "";
-    for (const frame of frames) {
-      const line = frame.split("\n").find((item) => item.startsWith("data: "));
-      if (line) onEvent(JSON.parse(line.slice(6)));
+    if (value) parser.push(decoder.decode(value, { stream: !done }));
+    if (done) {
+      parser.push(decoder.decode());
+      parser.finish();
+      break;
     }
-    if (done) break;
   }
 }
+
+const streamChat = (projectId, conversationId, message, onEvent, signal) =>
+  stream(`/projects/${projectId}/conversations/${conversationId}/chat/stream`, message, onEvent, signal, "对话请求失败");
+
+const streamGlobalChat = (conversationId, message, onEvent, signal) =>
+  stream(`/chat/conversations/${conversationId}/chat/stream`, message, onEvent, signal, "普通对话请求失败");
 
 export async function folderIdentity(files) {
   const entries = Array.from(files).map((file) =>

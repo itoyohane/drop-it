@@ -8,13 +8,15 @@ import pytest
 
 # Prevent the module-level ASGI app from opening a developer's real database.
 os.environ["DROPIT_ENV"] = "test"
+os.environ["LANGSMITH_TRACING"] = "false"
+os.environ["LANGCHAIN_TRACING_V2"] = "false"
 _bootstrap_dir = Path.cwd() / f".dropit-test-bootstrap-{os.getpid()}"
 _bootstrap_dir.mkdir(exist_ok=True)
 os.environ["DROPIT_DATA_DIR"] = str(_bootstrap_dir)
 os.environ["DEEPSEEK_API_KEY"] = ""
 
 from backend.models import Track
-from backend.agent.tools import DropItToolRegistry
+from backend.agent.retrieval import DropItToolRegistry
 from backend.repositories import DropItStore
 
 

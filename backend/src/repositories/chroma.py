@@ -28,6 +28,18 @@ class ChromaEmbeddingsRepository:
             Path(self.path).mkdir(parents=True, exist_ok=True)
             self.client = chromadb.PersistentClient(path=self.path)
         self.lock = RLock()
+        self._closed = False
+
+    def close(self) -> None:
+        """Release Chroma's background system/telemetry resources."""
+
+        with self.lock:
+            if self._closed:
+                return
+            close = getattr(self.client, "close", None)
+            if close is not None:
+                close()
+            self._closed = True
 
     @staticmethod
     def _collection_name(model: str) -> str:

@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.agent.agent import DropItAgent, MODEL_NOT_CONFIGURED_ERROR
-from backend.agent.intent import IntentRecognizer, OllamaIntentFallback
+from backend.agent.graph import GenerateSetCommand, IntentRecognizer, OllamaIntentFallback
 from backend.audio import pending_track, sha256_file
 from backend.config import Settings
 from backend.workers.analyze_track import JobRunner
@@ -24,7 +24,14 @@ from backend.music.text_models import (
     DashScopeTextEmbedder, DeepSeekTrackDescriptor, TextEmbedder, TrackDescriptor,
 )
 from backend.repositories import GLOBAL_PROJECT_ID, DropItStore
-from backend.agent.tools import DropItToolRegistry, generate_playlist, render_export
+from backend.agent.retrieval import DropItToolRegistry
+from backend.agent.set_planning import (
+    SetConstraintConflictError,
+    persist_set,
+    plan_set,
+    render_export,
+    validate_and_repair_set,
+)
 
 
 SUPPORTED_AUDIO = {".mp3", ".wav", ".flac", ".aiff", ".aif", ".m4a"}
@@ -110,7 +117,7 @@ def create_app(settings: Settings | None = None, *, embedder: TextEmbedder | Non
 
     @app.get("/api/health")
     def health():
-        return {"status": "ok", "version": "2.0.0", "agent_framework": "langchain.create_agent",
+        return {"status": "ok", "version": "2.0.0", "agent_framework": "langgraph.state_graph",
                 "tools": registry.names, "model_configured": copilot.model_configured,
                 # This is display-only metadata. Credentials remain server-side.
                 "model_name": settings.model_name,
@@ -185,8 +192,16 @@ def create_app(settings: Settings | None = None, *, embedder: TextEmbedder | Non
         model_or_503(copilot)
 
         async def events():
-            async for event in copilot.stream_chat(GLOBAL_PROJECT_ID, conversation_id, body.message):
-                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+            try:
+                async for event in copilot.stream_chat(
+                    GLOBAL_PROJECT_ID, conversation_id, body.message, body.run_id
+                ):
+                    yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+            except Exception as exc:
+                logger.exception("global_agent_stream_failed")
+                payload = {"type": "error", "detail": str(exc)[:300],
+                           "error_code": "stream_failed"}
+                yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
         return StreamingResponse(events(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
@@ -322,9 +337,11 @@ def create_app(settings: Settings | None = None, *, embedder: TextEmbedder | Non
     async def chat(project_id: str, conversation_id: str, body: ChatRequest):
         conversation_or_404(store, project_id, conversation_id)
         model_or_503(copilot)
-        message, playlist = await copilot.chat(project_id, conversation_id, body.message)
+        message, playlist, metadata = await copilot.chat_with_metadata(
+            project_id, conversation_id, body.message, body.run_id
+        )
         return ChatResponse(message=message, playlist=playlist,
-                            model_configured=copilot.model_configured)
+                            model_configured=copilot.model_configured, **metadata)
 
     @app.post("/api/projects/{project_id}/conversations/{conversation_id}/chat/stream")
     async def chat_stream(project_id: str, conversation_id: str, body: ChatRequest):
@@ -334,11 +351,15 @@ def create_app(settings: Settings | None = None, *, embedder: TextEmbedder | Non
         async def events():
             try:
                 # Convert internal agent events into SSE frames so the UI can render tokens/tools live.
-                async for event in copilot.stream_chat(project_id, conversation_id, body.message):
+                async for event in copilot.stream_chat(
+                    project_id, conversation_id, body.message, body.run_id
+                ):
                     yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
             except Exception as exc:
                 logger.exception("agent_stream_failed")
-                yield f"data: {json.dumps({'type': 'error', 'detail': str(exc)[:300]}, ensure_ascii=False)}\n\n"
+                payload = {"type": "error", "detail": str(exc)[:300],
+                           "error_code": "stream_failed"}
+                yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
         return StreamingResponse(events(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
@@ -352,7 +373,31 @@ def create_app(settings: Settings | None = None, *, embedder: TextEmbedder | Non
     def create_playlist(project_id: str, brief: Brief):
         project_or_404(store, project_id)
         try:
-            return store.save_playlist(generate_playlist(project_id, brief, store.all_tracks(project_id)))
+            command = GenerateSetCommand(
+                request=brief.notes or brief.title,
+                duration_min=brief.duration_min,
+                bpm_min=brief.bpm_min,
+                bpm_max=brief.bpm_max,
+                energy_curve=brief.energy,
+                style_query=brief.style,
+            )
+            candidates = store.all_tracks(project_id)
+            playlist = plan_set(
+                project_id,
+                candidates,
+                request=command.request,
+                duration_min=command.duration_min,
+                bpm_min=command.bpm_min,
+                bpm_max=command.bpm_max,
+                energy_curve=command.energy_curve,
+                style_query=command.style_query,
+            )
+            playlist, _, _ = validate_and_repair_set(
+                playlist, candidates, required_tracks=command.required_tracks
+            )
+            return persist_set(store, project_id, playlist)
+        except SetConstraintConflictError as exc:
+            raise HTTPException(409, exc.api_detail()) from exc
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
 

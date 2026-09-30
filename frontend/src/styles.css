@@ -133,6 +133,9 @@ h1, h2, h3, p { margin-top: 0; }
 .send-button:hover:not(:disabled) { transform: translateY(-1px); background: var(--accent-hover); }
 .send-button:disabled { opacity: .25; cursor: not-allowed; }
 .send-button svg { width: 14px; height: 14px; }
+.send-button.cancel-stream { background: var(--error); color: #fff; }
+.stream-errors > div { border-color: rgba(181, 71, 66, .24); background: #fff6f4; color: var(--error); }
+.stream-errors svg { color: var(--error); }
 
 .workspace { flex: 1; min-height: 0; overflow-y: auto; width: 100%; padding: 40px clamp(20px, 4vw, 54px) 70px; }
 .workspace > * { max-width: 1120px; margin-left: auto; margin-right: auto; }

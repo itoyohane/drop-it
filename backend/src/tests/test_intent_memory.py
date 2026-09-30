@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from backend.agent.intent import Intent, IntentRecognizer, IntentResult, OllamaIntentFallback
+from backend.agent.graph import Intent, IntentRecognizer, IntentResult, OllamaIntentFallback
 from backend.agent.memory import ContextCompressor, ShortTermMemory
 
 

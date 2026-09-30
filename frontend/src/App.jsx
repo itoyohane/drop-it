@@ -6,6 +6,7 @@ import {
   WarningCircle, Waveform, X, Trash, PencilSimple,
 } from "@phosphor-icons/react";
 import { api, folderIdentity } from "./api";
+import { applyChatEvent, reconcileChatFailure, toolLabel } from "./chatStream.mjs";
 
 const initialBrief = {
   title: "Friday warm-up", duration_min: 45, bpm_min: 118, bpm_max: 132,
@@ -169,6 +170,8 @@ function App() {
   const folderInput = useRef(null);
   const streamController = useRef(null);
 
+  useEffect(() => () => streamController.current?.abort(), []);
+
   const activeProject = projects.find((item) => item.id === activeId) || null;
   useEffect(() => {
     let disposed = false;
@@ -263,6 +266,7 @@ function App() {
   }, [activeId, chatMode, jobs]);
 
   const selectProject = (id) => {
+    streamController.current?.abort();
     setConversationScope(""); setConversationId("");
     setTrackToRemove(null);
     setActiveId(id); setChatMode("project"); setSection("chat");
@@ -270,6 +274,7 @@ function App() {
   };
 
   const selectGlobalChat = () => {
+    streamController.current?.abort();
     setConversationScope(""); setConversationId("");
     setTrackToRemove(null);
     setChatMode("global"); setSection("chat");
@@ -328,14 +333,15 @@ function App() {
   const sendChat = async (text) => {
     if ((chatMode === "project" && !activeId) || !conversationId || !text.trim() || busy === "chat") return;
     const scopeId = chatMode === "global" ? "global-chat" : activeId;
+    const turnId = Date.now();
+    const assistantId = `stream-${turnId}`;
     // Render the user's turn immediately; replace it with the server record when SSE confirms persistence.
     const optimistic = {
-      id: `temp-${Date.now()}`, project_id: scopeId, conversation_id: conversationId, role: "user", content: text.trim(),
+      id: `temp-${turnId}`, project_id: scopeId, conversation_id: conversationId, role: "user", content: text.trim(),
       tool_events: [], created_at: new Date().toISOString(),
     };
     setMessages((items) => [...items, optimistic]); setBusy("chat"); setChatStatus("正在生成回答"); setError("");
     try {
-      const assistantId = `stream-${Date.now()}`;
       setMessages((items) => [...items, { id: assistantId, project_id: scopeId, conversation_id: conversationId,
         role: "assistant", content: "", tool_events: [], created_at: new Date().toISOString() }]);
       streamController.current = new AbortController();
@@ -343,23 +349,21 @@ function App() {
       const streamArgs = chatMode === "global"
         ? [conversationId, text.trim()]
         : [activeId, conversationId, text.trim()];
+      let completed = false;
       await stream(...streamArgs, (event) => {
-        // Each event type updates only the small piece of transient UI state it owns.
-        if (event.type === "user_saved") setMessages((items) => items.map((item) => item.id === optimistic.id ? event.message : item));
+        // Reconcile every persisted record with its optimistic counterpart while tokens arrive.
+        setMessages((items) => applyChatEvent(items, event, { optimisticId: optimistic.id, assistantId }));
         if (event.type === "token") {
           setChatStatus("正在生成回答");
-          setMessages((items) => items.map((item) => item.id === assistantId ? { ...item, content: item.content + event.content } : item));
         }
         if (event.type === "tool") {
-          const toolLabels = { search_library: "检索曲库", create_playlist: "编排 Set", validate_playlist: "检查衔接" };
-          setChatStatus(event.status === "running" ? `正在${toolLabels[event.name] || "调用工具"}` : "正在整理结果");
-          setMessages((items) => items.map((item) => item.id === assistantId ? {
-            ...item, tool_events: [...item.tool_events.filter((tool) => tool.name !== event.name || tool.status !== "running"), event],
-          } : item));
+          const label = toolLabel(event.name);
+          setChatStatus(event.status === "running" ? `正在${label}`
+            : event.status === "failed" ? `${label}失败` : `${label}完成，正在整理结果`);
         }
         if (event.type === "status") setChatStatus(event.label || "正在生成回答");
         if (event.type === "complete") {
-          setMessages((items) => items.map((item) => item.id === assistantId ? event.message : item));
+          completed = true;
           if (event.playlist) {
             setPlaylist(event.playlist);
             setPlaylists((items) => [event.playlist, ...items.filter((item) => item.id !== event.playlist.id)]);
@@ -367,13 +371,16 @@ function App() {
         }
         if (event.type === "error") setError(event.detail);
       }, streamController.current.signal);
-      const data = await (chatMode === "global" ? api.globalConversations() : api.conversations(activeId));
-      setConversations(data.conversations);
+      if (!completed) throw new Error("流式响应意外结束，请重试。");
     } catch (err) {
-      setMessages((items) => items.filter((item) => item.id !== optimistic.id && !item.id.startsWith("stream-")));
-      setError(err.message);
+      const aborted = err.name === "AbortError";
+      const detail = aborted ? "已停止生成。" : err.message || "对话请求失败，请重试。";
+      setMessages((items) => reconcileChatFailure(items, { assistantId, detail }));
+      if (!aborted) setError(detail);
     } finally { setBusy(""); setChatStatus(""); streamController.current = null; }
   };
+
+  const cancelChat = () => streamController.current?.abort();
 
   const analyzeLibrary = async () => {
     if (!activeId) return;
@@ -476,7 +483,8 @@ function App() {
       {error && <div className="error-banner" role="alert"><WarningCircle weight="fill" />{error}<button onClick={() => setError("")}><X /></button></div>}
       {section === "chat" && (chatMode === "global" || activeProject) ? <ChatView mode={chatMode}
           project={activeProject} tracks={chatMode === "global" ? globalTracks : projectTracks} messages={messages}
-          busy={busy} chatStatus={chatStatus} sendChat={sendChat} importFolder={() => folderInput.current?.click()}
+          busy={busy} chatStatus={chatStatus} sendChat={sendChat} cancelChat={cancelChat}
+          importFolder={() => folderInput.current?.click()}
           openSet={() => setSection("set-builder")} playlist={playlist} /> :
         section === "chat" ? <Welcome onCreate={() => setProjectDialog(true)} /> : null}
       {section !== "chat" && <>
@@ -527,11 +535,11 @@ function Welcome({ onCreate }) {
     <button className="primary-button" onClick={onCreate}><Plus />创建项目</button></section>;
 }
 
-function ChatView({ mode, project, tracks, messages, busy, chatStatus, sendChat, importFolder, openSet, playlist }) {
+function ChatView({ mode, project, tracks, messages, busy, chatStatus, sendChat, cancelChat, importFolder, openSet, playlist }) {
   const [draft, setDraft] = useState("");
   const endRef = useRef(null);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, busy]);
-  const submit = (event) => { event.preventDefault(); if (draft.trim()) { sendChat(draft); setDraft(""); } };
+  const submit = (event) => { event.preventDefault(); if (busy !== "chat" && draft.trim()) { sendChat(draft); setDraft(""); } };
   const suggestions = mode === "global"
     ? ["介绍一下我的总曲库", "推荐一些适合 warm-up 的选曲思路", "解释 Camelot 调性轮怎么使用"]
     : ["排一个 45 分钟、逐步升温的 warm-up set", "找出 124 BPM 附近、能量适中的曲目", "做一套调性衔接平滑的 closing set"];
@@ -555,7 +563,9 @@ function ChatView({ mode, project, tracks, messages, busy, chatStatus, sendChat,
       <div className="composer-actions">{mode === "project" && <button type="button" className="attach-button" onClick={importFolder} disabled={busy === "import"}>
         {busy === "import" ? <CircleNotch className="spin" /> : <FolderOpen />}<span>{busy === "import" ? "正在分析音频" : "导入曲库"}</span></button>
         }
-        <button className="send-button" disabled={!draft.trim() || busy === "chat"} aria-label="发送"><PaperPlaneRight weight="fill" /></button></div>
+        {busy === "chat"
+          ? <button type="button" className="send-button cancel-stream" onClick={cancelChat} aria-label="停止生成" title="停止生成"><X weight="bold" /></button>
+          : <button className="send-button" disabled={!draft.trim()} aria-label="发送"><PaperPlaneRight weight="fill" /></button>}</div>
     </form>
   </section>;
 }
@@ -571,12 +581,14 @@ function ModelThinking({ status }) {
 }
 
 function Message({ message }) {
-  if (message.role === "assistant" && !message.content && !message.tool_events?.length) return null;
+  if (message.role === "assistant" && !message.content && !message.tool_events?.length && !message.stream_errors?.length) return null;
   return <article className={`message ${message.role}`}>
     {message.role === "assistant" && <div className="assistant-mark"><Waveform /></div>}
     <div><MarkdownContent value={message.content} />
       {!!message.tool_events?.length && <div className="tool-events">{message.tool_events.map((event, index) => <div key={`${event.name}-${index}`}>
-        {event.status === "failed" ? <WarningCircle /> : <CheckCircle weight="fill" />}<span><strong>{event.name}</strong>{event.summary}</span></div>)}</div>}
+        {event.status === "failed" ? <WarningCircle /> : <CheckCircle weight="fill" />}<span><strong>{toolLabel(event.name)}</strong>{event.summary}</span></div>)}</div>}
+      {!!message.stream_errors?.length && <div className="tool-events stream-errors">{message.stream_errors.map((detail) => <div key={detail}>
+        <WarningCircle /><span><strong>对话未正常完成</strong>{detail}</span></div>)}</div>}
     </div>
   </article>;
 }
