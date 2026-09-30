@@ -1,3 +1,6 @@
+import httpx
+import pytest
+
 from backend.agent.intent import Intent, IntentRecognizer, IntentResult, OllamaIntentFallback
 from backend.agent.memory import ContextCompressor, ShortTermMemory
 
@@ -38,6 +41,89 @@ def test_ollama_result_accepts_overstep_and_rejects_unknown_routes():
     invalid = OllamaIntentFallback._parse('{"intent":"invented","confidence":1}')
     assert invalid.name == Intent.MUSIC_CHAT and invalid.confidence == 0
     assert not invalid.allows_tools and not result.allows_tools
+
+
+@pytest.mark.parametrize("text", [
+    "帮我完成一个网页，内容是鹈鹕骑自行车",
+    "帮我制作一个音乐播放器网页",
+    "做个页面展示歌词",
+    "Build a website with a cycling pelican",
+])
+def test_web_development_is_overstep_even_if_classifier_is_unavailable(text):
+    class UnavailableFallback:
+        def classify(self, text):
+            raise AssertionError("web development must be rejected by intent rules")
+
+    result = IntentRecognizer(fallback=UnavailableFallback()).recognize(text)
+    assert result.name == Intent.OVERSTEP
+    assert not result.allows_tools
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("搜索适合网页背景播放的歌曲", Intent.SEARCH_LIBRARY),
+    ("生成适合网页背景播放的歌单", Intent.GENERATE_SET),
+])
+def test_web_background_music_remains_a_music_task(text, expected):
+    assert IntentRecognizer().recognize(text).name == expected
+
+
+def test_ollama_classification_disables_thinking_and_constrains_labels(monkeypatch):
+    def post(url, *, headers, json, timeout):
+        assert url == "http://localhost:11434/v1/chat/completions"
+        assert json["reasoning_effort"] == "none"
+        schema = json["response_format"]["json_schema"]["schema"]
+        assert set(schema["properties"]["intent"]["enum"]) == {intent.value for intent in Intent}
+        return httpx.Response(200, request=httpx.Request("POST", url), json={
+            "choices": [{"finish_reason": "stop", "message": {
+                "content": '{"intent":"overstep","confidence":0.95}',
+            }}],
+        })
+
+    monkeypatch.setattr(httpx, "post", post)
+    result = OllamaIntentFallback("http://localhost:11434/v1", "minicpm5-2b").classify(
+        "帮我完成一个网页，内容是鹈鹕骑自行车"
+    )
+    assert result.name == Intent.OVERSTEP and result.confidence == .95
+
+
+@pytest.mark.parametrize("content", [
+    None, "", "not valid JSON", "[]",
+    '解释：{"intent":"search_library","confidence":0.9}',
+    '{"intent":"unknown","confidence":0.9}',
+    '{"intent":"search_library"}',
+    '{"intent":"search_library","confidence":true}',
+    '{"intent":"search_library","confidence":NaN}',
+    '{"intent":"search_library","confidence":2}',
+])
+def test_invalid_classification_only_allows_clarification(content):
+    result = OllamaIntentFallback._parse(content)
+    assert result.name == Intent.MUSIC_CHAT and not result.allows_tools
+    assert result.confidence == 0
+    assert "仅用一句话询问" in result.guidance
+    assert "不得执行原始任务" in result.guidance
+
+
+def test_truncated_ollama_output_does_not_authorize_a_tool(monkeypatch):
+    monkeypatch.setattr(httpx, "post", lambda url, **kwargs: httpx.Response(
+        200, request=httpx.Request("POST", url), json={
+            "choices": [{"finish_reason": "length", "message": {
+                "content": '{"intent":"search_library","confidence":0.9}',
+            }}],
+        },
+    ))
+    result = OllamaIntentFallback("http://localhost:11434/v1", "minicpm5-2b").classify("推荐音乐")
+    assert result.name == Intent.MUSIC_CHAT and not result.allows_tools
+    assert "被截断" in result.guidance
+
+
+def test_classifier_timeout_only_allows_clarification():
+    class UnavailableFallback:
+        def classify(self, text):
+            raise httpx.ReadTimeout("classifier timeout")
+
+    result = IntentRecognizer(fallback=UnavailableFallback()).recognize("推荐音乐")
+    assert result.name == Intent.MUSIC_CHAT and not result.allows_tools
+    assert "不得执行原始任务" in result.guidance
 
 
 def test_short_term_memory_is_bounded_isolated_and_expires():

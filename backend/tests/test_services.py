@@ -383,7 +383,12 @@ def test_agent_executes_real_langchain_tool_graph(library):
     assert events[-1]["playlist"]["tracks"][0]["track"]["id"] == "Similar"
 
 
-def test_agent_refuses_overstep_without_calling_chat_model_or_tools():
+@pytest.mark.parametrize("text", [
+    "帮我写一段 Python 股票分析代码",
+    "帮我完成一个网页，内容是鹈鹕骑自行车",
+    "帮我制作一个音乐播放器网页",
+])
+def test_agent_refuses_overstep_without_calling_chat_model_or_tools(text):
     store = DropItStore(":memory:")
     try:
         project = store.create_project("Overstep")
@@ -395,7 +400,7 @@ def test_agent_refuses_overstep_without_calling_chat_model_or_tools():
 
         async def collect():
             return [event async for event in agent.stream_chat(
-                project.id, conversation.id, "帮我写一段 Python 股票分析代码"
+                project.id, conversation.id, text
             )]
 
         events = asyncio.run(collect())
