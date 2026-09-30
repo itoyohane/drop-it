@@ -35,3 +35,7 @@
 ## 验证与复盘
 
 完整后端回归：61 项通过、1 项音频集成测试按配置跳过；网页请求的 Agent 回归确认不调用主模型或工具。绕过规则直接调用真实 MiniCPM5，原请求返回完整 `overstep` JSON、16 个输出 tokens，无思考输出。另抽测网页变体、接歌及音乐知识问题均得到完整 JSON；速度筛选请求仍有语义误分类，格式修复不代表模型分类准确率已达标。测试见 `backend/src/tests/test_intent_memory.py`、`backend/src/tests/test_services.py`。
+
+### 运行实例复盘
+
+修复后仍出现代码，是因为网页实际连接 `.codex/worktrees/6c22/drop-it` 的旧服务，而修复位于 `Documents/ChatGPT/drop-it`；运行工作区仍使用 128 tokens 的旧分类器，实际请求记录为 `music_chat`。已将修复快进同步到运行工作区，由 Uvicorn 热重载生效，保留曲库和原会话。实际 SSE API 验证原句和“给我整一个有鹈鹕踩单车的网站”均进入 `overstep` 并拒答，无代码和工具事件；临时验证会话已删除。意图代码现已随架构合并移入 `backend/src/agent/graph.py`。交付验证应包含实际运行实例，不能只检查另一目录的源码和离线测试。
