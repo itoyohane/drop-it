@@ -3,7 +3,9 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
+from pathlib import Path
 
+from backend.music.audio_cache import AudioCache
 from backend.music.indexer import MusicIndexer
 from backend.music.librosa_analyzer import LibrosaAnalyzer
 from backend.music.text_models import TextEmbedder, TrackDescriptor
@@ -14,16 +16,27 @@ logger = logging.getLogger(__name__)
 
 class JobRunner:
     def __init__(self, store: DropItStore, embedder: TextEmbedder,
-                 descriptor: TrackDescriptor, analyzer: LibrosaAnalyzer | None = None):
+                 descriptor: TrackDescriptor, analyzer: LibrosaAnalyzer | None = None,
+                 audio_cache: AudioCache | None = None):
         self.store, self.embedder, self.descriptor = store, embedder, descriptor
         self.analyzer = analyzer or LibrosaAnalyzer()
         self.indexer = MusicIndexer(store, embedder)
+        self.audio_cache = audio_cache
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="dropit-analysis")
         self._submitted: set[str] = set()
         self._lock = Lock()
 
     def start(self) -> None:
-        for job in self.store.recover_jobs():
+        jobs = self.store.recover_jobs()
+        # An interrupted force job still needs its audio. Preserve it until that
+        # job has extracted and committed replacement features.
+        protected = {track_id for job in jobs if job.payload.get("force")
+                     for track_id in job.payload.get("track_ids", [])}
+        if self.audio_cache:
+            for track in self.store.all_tracks():
+                if track.id not in protected:
+                    self.audio_cache.release(track)
+        for job in jobs:
             self.submit(job.id)
 
     def close(self) -> None:
@@ -52,7 +65,7 @@ class JobRunner:
                 current = self.store.get_job(job_id)
                 if not current or current.status == "cancelled":
                     return
-                failed += not self._analyze(track.id, force=bool(job.payload.get("force")))
+                failed += not self._analyze(track.id, force=bool(job.payload.get("force")), job_id=job_id)
                 self.store.update_job(job_id, progress=index, message=f"已处理 {index}/{len(tracks)} 首")
             for source_id in sources:
                 ready = all(self.ready(t) for t in self.store.source_tracks(source_id))
@@ -76,16 +89,35 @@ class JobRunner:
                 and track.embedding_status == "ready"
                 and track.embedding_model == self.embedder.model_key)
 
-    def _analyze(self, track_id: str, force: bool = False) -> bool:
+    def _release_audio(self, track, job_id: str | None) -> None:
+        if not self.audio_cache:
+            return
+        # Do not release a shared source needed by another queued force job.
+        with self.store.lock:
+            protected = any(
+                job.id != job_id and job.payload.get("force")
+                and track.id in job.payload.get("track_ids", [])
+                for job in self.store.pending_jobs()
+            )
+            if not protected:
+                self.audio_cache.release(track)
+
+    def _analyze(self, track_id: str, force: bool = False, job_id: str | None = None) -> bool:
         track = self.store.get_track(track_id)
         if track is None:
             return False
         if not force and self.ready(track):
+            self._release_audio(track, job_id)
             return True
         needs_features = force or track.analysis_status != "analyzed" or not track.analyzer.startswith("librosa:")
         needs_description = (needs_features or not track.description
                              or track.description_model != self.descriptor.model_key)
         if needs_features:
+            if self.audio_cache and not Path(track.path).is_file():
+                # Keep valid metadata/vectors intact if a queued force request
+                # loses its source file before it executes.
+                logger.warning("audio_missing_reupload_required: %s", track.id)
+                return False
             self.store.mark_track_analyzing(track_id)
             try:
                 track = self.analyzer.analyze(track)
@@ -96,6 +128,10 @@ class JobRunner:
                     "description": "", "description_model": "",
                 }))
                 return False
+            # Commit numerical features before description/embedding API calls.
+            # Those stages can be retried without retaining the original audio.
+            track = self.store.update_track_analysis(track)
+        self._release_audio(track, job_id)
         if needs_description:
             try:
                 description = self.descriptor.describe(track)

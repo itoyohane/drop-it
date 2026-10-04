@@ -776,9 +776,16 @@ class SqliteRepository:
                      source_id: str | None = None) -> Track:
         now = _now()
         with self.lock:
-            existing = self.connection.execute("SELECT id FROM tracks WHERE file_hash=?", (file_hash,)).fetchone()
+            existing = self.connection.execute("SELECT id, path FROM tracks WHERE file_hash=?", (file_hash,)).fetchone()
             if existing:
                 track_id = existing["id"]
+                # Re-upload restores a released/missing source for explicit
+                # reanalysis, without replacing the existing song's metadata.
+                if not Path(existing["path"]).is_file() and Path(track.path).is_file():
+                    self.connection.execute(
+                        "UPDATE tracks SET path=?, updated_at=? WHERE id=?",
+                        (track.path, now, track_id),
+                    )
             else:
                 track_id = track.id
                 self.connection.execute(
@@ -850,6 +857,11 @@ class SqliteRepository:
     def get_track(self, track_id: str) -> Track | None:
         with self.lock:
             row = self.connection.execute("SELECT * FROM tracks WHERE id=?", (track_id,)).fetchone()
+        return self._track(row) if row else None
+
+    def get_track_by_file_hash(self, file_hash: str) -> Track | None:
+        with self.lock:
+            row = self.connection.execute("SELECT * FROM tracks WHERE file_hash=?", (file_hash,)).fetchone()
         return self._track(row) if row else None
 
     def save_embedding(self, track_id: str, model: str, vector: np.ndarray) -> None:
@@ -1059,6 +1071,13 @@ class SqliteRepository:
         with self.lock:
             rows = self.connection.execute(
                 "SELECT * FROM jobs WHERE project_id=? ORDER BY created_at DESC LIMIT ?", (project_id, limit)
+            ).fetchall()
+        return [self._job(row) for row in rows]
+
+    def pending_jobs(self) -> list[Job]:
+        with self.lock:
+            rows = self.connection.execute(
+                "SELECT * FROM jobs WHERE status IN ('queued', 'running') ORDER BY created_at"
             ).fetchall()
         return [self._job(row) for row in rows]
 

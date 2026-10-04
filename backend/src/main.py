@@ -20,6 +20,7 @@ from backend.models import (
     FolderBindRequest, Playlist, ProjectCreate, ProjectUpdate, ReorderRequest, TrackUpdate,
 )
 from backend.music.librosa_analyzer import LibrosaAnalyzer
+from backend.music.audio_cache import AudioCache
 from backend.music.text_models import (
     DashScopeTextEmbedder, DeepSeekTrackDescriptor, TextEmbedder, TrackDescriptor,
 )
@@ -68,7 +69,8 @@ def create_app(settings: Settings | None = None, *, embedder: TextEmbedder | Non
         settings,
         intent=IntentRecognizer(fallback=intent_fallback),
     )
-    jobs = JobRunner(store, embedder, descriptor, analyzer)
+    jobs = JobRunner(store, embedder, descriptor, analyzer,
+                     AudioCache(settings.data_dir / "imports" / "sources", settings.retain_audio_files))
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -231,7 +233,7 @@ def create_app(settings: Settings | None = None, *, embedder: TextEmbedder | Non
 
     @app.post("/api/projects/{project_id}/library/import-files", status_code=202)
     async def import_files(project_id: str, source_id: str = Form(...),
-                           files: list[UploadFile] = File(...)):
+                           files: list[UploadFile] = File(...), reanalyze: bool = Form(False)):
         project_or_404(store, project_id)
         source = store.get_source(source_id)
         if not source or source_id not in store.project_source_ids(project_id):
@@ -252,28 +254,37 @@ def create_app(settings: Settings | None = None, *, embedder: TextEmbedder | Non
                 await upload.close()
                 continue
             destination = import_dir / f"{Path(original_name).stem}-{uuid4().hex}{suffix}"
-            written = 0
-            with destination.open("wb") as target:
-                # Stream uploads to disk: neither a single file nor a batch needs to fit in memory.
-                while chunk := await upload.read(1024 * 1024):
-                    written += len(chunk)
-                    if written > max_bytes:
-                        destination.unlink(missing_ok=True)
-                        await upload.close()
-                        raise HTTPException(413, f"文件 {original_name} 超过 {settings.max_upload_mb} MB")
-                    target.write(chunk)
-            await upload.close()
-            file_hash = sha256_file(destination)
-            track = store.upsert_track(
-                pending_track(destination, file_hash, original_name), file_hash, project_id, source_id=source_id
-            )
+            try:
+                written = 0
+                with destination.open("wb") as target:
+                    # Stream uploads to disk without loading whole files into memory.
+                    while chunk := await upload.read(1024 * 1024):
+                        written += len(chunk)
+                        if written > max_bytes:
+                            raise HTTPException(413, f"文件 {original_name} 超过 {settings.max_upload_mb} MB")
+                        target.write(chunk)
+                file_hash = sha256_file(destination)
+                track = store.upsert_track(
+                    pending_track(destination, file_hash, original_name), file_hash, project_id, source_id=source_id
+                )
+            except BaseException:
+                # Close the writer before unlinking, including on Windows.
+                destination.unlink(missing_ok=True)
+                raise
+            finally:
+                await upload.close()
+            if Path(track.path).resolve() != destination.resolve():
+                # The content hash already has a canonical copy. This upload
+                # was never referenced by the catalog and must not become an orphan.
+                destination.unlink(missing_ok=True)
             track_ids.append(track.id)
 
         track_ids = list(dict.fromkeys(track_ids))
         if not track_ids:
             raise HTTPException(400, "没有找到支持的音频文件")
         job = store.create_job(
-            project_id, "analyze", {"track_ids": track_ids, "source_ids": [source_id]}, len(track_ids)
+            project_id, "analyze", {"track_ids": track_ids, "source_ids": [source_id],
+                                   "force": reanalyze}, len(track_ids)
         )
         jobs.submit(job.id)
         return {"job": job, "tracks": store.all_tracks(project_id),
@@ -287,6 +298,11 @@ def create_app(settings: Settings | None = None, *, embedder: TextEmbedder | Non
         if not track_ids:
             return {"job": None, "count": 0}
         allowed = [track.id for track in store.tracks_by_ids(track_ids, project_id)]
+        if body.track_ids:
+            missing = [track.id for track in store.tracks_by_ids(allowed, project_id)
+                       if not Path(track.path).is_file()]
+            if missing:
+                raise HTTPException(409, "音频缓存已释放或文件缺失，请重新上传原音频并请求重新检测。")
         source_ids = list(store.source_ids_for_tracks(allowed, project_id))
         job = store.create_job(
             project_id, "analyze", {"track_ids": allowed, "source_ids": source_ids,

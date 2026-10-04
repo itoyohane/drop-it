@@ -7,6 +7,24 @@ Agent 只调用三个工具：`search_library`、`find_similar_tracks`、`genera
 音乐 RAG 保存歌曲描述的文本向量；查询文本通过同一个 DashScope embedding API 编码。
 曲目信息、描述、会话、后台任务和 Set 保存在 SQLite，向量保存在 `DROPIT_CHROMA_DIR` 指向的 Chroma 目录。
 
+上传音频默认作为临时分析缓存：librosa 特征写入 SQLite 后，自动释放服务器的上传副本（MP3/WAV/FLAC 等）。
+描述或向量 API 失败可直接用已保存特征重试；音频分析失败则保留副本。重复上传按内容哈希复用曲目，不积累多余文件。
+后端重启时也会清理已分析曲目的旧副本。原始音乐文件不受影响，数据库和 Chroma 向量保留。
+
+需要保留服务器音频用于再次检测或 M3U 路径导出时，在 `.env` 设置 `DROPIT_RETAIN_AUDIO_FILES=true`。
+默认模式下 `Track.path` 只是历史上传位置，导出的 M3U/CSV 路径须映射到用户原始音乐文件才能播放；当前不提供音频播放服务。
+再次检测已释放缓存的曲目，使用上传接口并设置 multipart 字段 `reanalyze=true`；普通重复导入复用已有分析。
+
+清理旧版本留下的缓存（含重复上传副本），先停止后端，再预览并执行：
+
+```powershell
+python -m backend.music.cleanup_audio
+python -m backend.music.cleanup_audio --apply
+```
+
+工具只删除 `data/imports/sources` 下、内容哈希能对应已完成 librosa 分析曲目的文件；待处理/失败曲目和待执行强制检测所需音频保留。
+`--apply` 是显式清理，独立于保留缓存开关；未能匹配曲目的孤立文件不会自动删除。
+
 文档入口：[docs](docs/README.md)。
 
 - [运行与验证](docs/tutorial-run-and-observe.md)：安装、模型配置、导入、对话和故障排查。

@@ -33,8 +33,8 @@
 | `GET /api/projects/{project_id}/library` | `{tracks: [...], scope: "project"}` |
 | `GET /api/projects/{project_id}/sources` | `{sources: [...]}` |
 | `POST /api/projects/{project_id}/sources/resolve` | `{folder_key, name}`；解析并绑定来源，返回 `source`、`reused`、`tracks` |
-| `POST /api/projects/{project_id}/library/import-files` | multipart：`source_id`、多个 `files`；`202`，返回 job/tracks/count/skipped |
-| `POST /api/projects/{project_id}/library/analyze` | `{track_ids: []}`；`202`；空列表处理未 ready 曲目，显式 IDs 强制重分析；无待处理曲目时 `job=null` |
+| `POST /api/projects/{project_id}/library/import-files` | multipart：`source_id`、多个 `files`、`reanalyze=false`（true 强制检测重新上传的音频）；`202`，返回 job/tracks/count/skipped |
+| `POST /api/projects/{project_id}/library/analyze` | `{track_ids: []}`；`202`；空列表处理未 ready 曲目，显式 IDs 强制重分析，音频缓存已释放/缺失返回 `409` 并保留原分析；无待处理曲目时 `job=null` |
 | `PATCH /api/projects/{project_id}/library/{track_id}` | TrackUpdate；更新事实并提交描述、向量重建任务 |
 | `DELETE /api/projects/{project_id}/library/{track_id}` | `204`，解除当前项目关联，不等于删除其他项目的同一歌曲 |
 | `GET /api/projects/{project_id}/jobs` | `{jobs: [...]}` |
@@ -100,7 +100,7 @@ HTTP 创建 Set 使用 Brief，默认 BPM 为 `118–132`，energy="build"、sty
 | AgentState | 命令、历史、候选、结果、歌单、校验、修复次数、错误、回答 |
 | AgentRuntimeContext | 服务端范围与依赖：project_id、conversation_id、store、registry、model_factory、run_id、claim_owner/claim_token |
 
-默认 SQLite 是 `data/dropit.db`，Chroma 是 `data/chroma/`，上传在数据目录的 imports/sources 下。SQLite 保存关系、音乐事实、描述、索引状态、消息、任务、歌单和 Agent 运行；Chroma 按 embedding model_key 隔离向量。当前按范围内歌曲 IDs 读取向量，再由 NumPy 做余弦全量排序，没有使用 Chroma ANN query。
+默认 SQLite 是 `data/dropit.db`，Chroma 是 `data/chroma/`，上传暂存于数据目录的 imports/sources 下，默认在 librosa 特征持久化后释放，分析失败保留。重启清理已分析的旧缓存，保护待恢复的强制检测任务。重复内容只保留一个上传副本，描述/向量重建不依赖音频。Track.path 保留历史位置，释放后 M3U/CSV 导出路径需映射到用户原文件，不能直接播放。旧重复副本可先停止后端，再运行 `python -m backend.music.cleanup_audio` 预览，带 `--apply` 删除；按内容哈希核对，未匹配、失败或待强制检测文件保留。SQLite 保存关系、音乐事实、描述、索引状态、消息、任务、歌单和 Agent 运行；Chroma 按 embedding model_key 隔离向量。当前按范围内歌曲 IDs 读取向量，再由 NumPy 做余弦全量排序，没有使用 Chroma ANN query。
 
 [checkpoints.py](../backend/src/agent/checkpoints.py) 定义持久化步骤：
 
@@ -155,6 +155,7 @@ Settings 从根目录 `.env`、`.env.local` 和环境变量加载，忽略额外
 | `DROPIT_CORS_ORIGINS` | http://127.0.0.1:5173,http://localhost:5173 |
 | `DROPIT_MAX_UPLOAD_MB` | 1024；10–4096，单文件限制 |
 | `DROPIT_MAX_UPLOAD_FILES` | 500；1–5000，单批文件数 |
+| `DROPIT_RETAIN_AUDIO_FILES` | false；特征持久化后释放上传副本；true 保留音频供再次检测/路径导出 |
 | `DROPIT_MUSIC_MODEL_DEVICE` | cpu；遗留本地适配器选项，不控制默认云端模型 |
 | `DROPIT_MUSIC_MODELS_LOCAL_FILES_ONLY` | true；遗留选项，不代表默认模型离线 |
 | `DROPIT_LOG_LEVEL` | INFO；Settings 字段，不代表所有日志处理器已自动配置 |

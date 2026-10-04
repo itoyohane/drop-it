@@ -75,6 +75,7 @@ class Settings(BaseSettings):
     )
     max_upload_mb: int = Field(1024, ge=10, le=4096, validation_alias="DROPIT_MAX_UPLOAD_MB")
     max_upload_files: int = Field(500, ge=1, le=5000, validation_alias="DROPIT_MAX_UPLOAD_FILES")
+    retain_audio_files: bool = Field(False, validation_alias="DROPIT_RETAIN_AUDIO_FILES")
     # Music RAG uses hosted APIs for description generation and embeddings.  Keep the
     # API keys separate so a deployment can rotate one provider without touching the
     # agent/chat credentials.
