@@ -11,6 +11,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Callable, Literal, Protocol, TypeAlias, TypedDict
 
 import httpx
+from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
 from pydantic import BaseModel, ConfigDict, Field
@@ -131,6 +132,12 @@ def _json_object(value: str) -> dict[str, Any]:
 
 async def extract_command(model: Any, route: str, history: list[dict[str, str]],
                           user_text: str) -> CommandPayload:
+    if isinstance(model, ChatOpenAI):
+        # DeepSeek thinking mode rejects the named tool choice used by structured
+        # extraction. Clone per request so final responses keep their model mode.
+        model = model.model_copy(update={"extra_body": {
+            **(model.extra_body or {}), "thinking": {"type": "disabled"},
+        }})
     schema = schema_for(route)
     structured = None
     with_structured_output = getattr(model, "with_structured_output", None)

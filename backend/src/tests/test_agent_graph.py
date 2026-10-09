@@ -1,7 +1,9 @@
 import asyncio
+import json
 from pathlib import Path
 
 import backend
+import httpx
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
 from langchain_openai import ChatOpenAI
@@ -162,6 +164,72 @@ def test_chat_openai_function_calling_binding_omits_json_schema_response_format(
     kwargs = bindings[0].kwargs
     assert "response_format" not in kwargs
     assert kwargs["tools"][0]["function"]["parameters"]["additionalProperties"] is False
+
+
+@pytest.mark.parametrize("route,payload", [
+    ("search_library", {"query": "house", "limit": 5}),
+    ("find_similar_tracks", {"reference": "Signal", "limit": 3}),
+    ("generate_dj_set", {"duration_min": 10, "bpm_min": 118, "bpm_max": 132}),
+])
+@pytest.mark.parametrize("extra_body", [
+    None, {"thinking": {"type": "enabled"}, "test_marker": "preserved"},
+])
+def test_extraction_disables_thinking_on_wire_without_changing_response_model(
+    route, payload, extra_body
+):
+    requests = []
+
+    async def handle_request(request):
+        body = json.loads(request.content)
+        requests.append(body)
+        message = {"role": "assistant", "content": "最终回答。"}
+        if body.get("tools"):
+            if body.get("thinking", {}).get("type") != "disabled":
+                return httpx.Response(400, json={"error": {
+                    "message": "Thinking mode does not support this tool_choice",
+                    "type": "invalid_request_error",
+                }})
+            name = body["tool_choice"]["function"]["name"]
+            message = {"role": "assistant", "content": None, "tool_calls": [{
+                "id": "extraction-call", "type": "function",
+                "function": {"name": name, "arguments": json.dumps(payload)},
+            }]}
+        return httpx.Response(200, json={
+            "id": "offline-response", "object": "chat.completion", "created": 0,
+            "model": "deepseek-flash", "choices": [{
+                "index": 0, "message": message,
+                "finish_reason": "tool_calls" if body.get("tools") else "stop",
+            }],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        })
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle_request)) as client:
+            model = ChatOpenAI(
+                model="deepseek-flash", api_key="offline-test-only",
+                base_url="https://api.deepseek.com", http_async_client=client,
+                max_retries=0,
+                extra_body=extra_body,
+            )
+            command = await extract_command(model, route, [], "当前任务")
+            for key, value in payload.items():
+                assert getattr(command, key) == value
+            assert model.extra_body == extra_body
+            response = await model.ainvoke([("human", "给出最终回答")])
+            assert response.content == "最终回答。"
+
+    asyncio.run(run())
+    extraction, response = requests
+    assert extraction["thinking"] == {"type": "disabled"}
+    if extra_body:
+        assert extraction["test_marker"] == "preserved"
+    assert "response_format" not in extraction
+    assert extraction["tools"][0]["function"]["parameters"]["additionalProperties"] is False
+    if extra_body:
+        assert response["thinking"] == {"type": "enabled"}
+    else:
+        assert "thinking" not in response
+    assert "tools" not in response
 
 
 @pytest.mark.parametrize("error_code", ["candidate_retrieval_failed", "set_planning_failed"])

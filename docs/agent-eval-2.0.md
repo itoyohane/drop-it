@@ -85,6 +85,9 @@ baseline 应使用相同数据、模型配置、用例范围和重复策略。
 
 `DropItAgent` 提供默认关闭的内部 `trace_callback`，eval 观察实际编译图的节点更新，
 不改 SSE 协议。参数取自生产 Pydantic command，而不是从最终文本反推。
+命令参数提取显式使用 `function_calling`，并仅在这次请求中关闭 DeepSeek thinking，
+避免默认思考模式与强制指定提取函数的 `tool_choice` 冲突；仍保留严格 schema 校验。
+最终回答不复用该请求的模式覆盖，保持原始模型配置。
 
 | 路由 | 实际节点 |
 | --- | --- |
