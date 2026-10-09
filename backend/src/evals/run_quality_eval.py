@@ -1,4 +1,4 @@
-"""Run the seven-round DropIt quality evaluation and write auditable artifacts.
+"""Run configurable component quality evaluation and write auditable artifacts.
 
 This module deliberately evaluates the configured production models and the current
 SQLite/Chroma catalog. It never writes to the production store: playlist writes are
@@ -22,6 +22,7 @@ from backend.agent.graph import GenerateSetCommand, IntentRecognizer, OllamaInte
 from backend.agent.retrieval import DropItToolRegistry
 from backend.agent.set_planning import persist_set, plan_set, validate_and_repair_set
 from backend.config import Settings
+from backend.evals.runtime import EvaluationSnapshot, evaluation_settings
 from backend.models import MusicFilters, MusicMatch, Playlist, ToolResult, Track
 from backend.music.text_models import DashScopeTextEmbedder
 from backend.repositories import GLOBAL_PROJECT_ID, DropItStore
@@ -108,6 +109,7 @@ class EvaluationContext:
     project_name: str
     tracks: list[Track]
     canonical: dict[str, Track]
+    snapshot: EvaluationSnapshot | None = None
 
 
 def _pct(numerator: int | float, denominator: int | float) -> float:
@@ -199,36 +201,31 @@ def _select_project(store: DropItStore, model_key: str) -> tuple[str, str, list[
 
 
 def build_context(settings: Settings) -> EvaluationContext:
-    database = settings.data_dir / "dropit.db"
-    if not database.exists():
-        raise FileNotFoundError(f"数据库不存在：{database}")
     if not settings.dashscope_api_key:
         raise RuntimeError("DASHSCOPE_API_KEY 未配置，无法运行真实 RAG 评测")
-
-    store = DropItStore(str(database), vector_store_path=settings.resolved_chroma_dir)
-    embedder = DashScopeTextEmbedder(settings)
-    project_id, project_name, tracks = _select_project(store, embedder.model_key)
-    fallback = (
-        OllamaIntentFallback(
-            settings.ollama_base_url,
-            settings.ollama_model,
-            settings.ollama_timeout_seconds,
+    snapshot = EvaluationSnapshot(settings)
+    try:
+        store = snapshot.store
+        embedder = DashScopeTextEmbedder(settings)
+        project_id, project_name, tracks = _select_project(store, embedder.model_key)
+        fallback = (
+            OllamaIntentFallback(settings.ollama_base_url, settings.ollama_model,
+                                 settings.ollama_timeout_seconds)
+            if settings.intent_fallback_enabled else None
         )
-        if settings.intent_fallback_enabled
-        else None
-    )
-    proxy = ReadOnlyEvaluationStore(store)
-    return EvaluationContext(
-        settings=settings,
-        store=store,
-        proxy=proxy,
-        registry=DropItToolRegistry(proxy, embedder),  # type: ignore[arg-type]
-        recognizer=IntentRecognizer(fallback=fallback),
-        project_id=project_id,
-        project_name=project_name,
-        tracks=tracks,
-        canonical={track.id: track for track in tracks},
-    )
+        proxy = ReadOnlyEvaluationStore(store)
+        return EvaluationContext(
+            settings=settings, store=store, proxy=proxy,
+            registry=DropItToolRegistry(proxy, embedder),  # type: ignore[arg-type]
+            recognizer=IntentRecognizer(fallback=fallback),
+            project_id=project_id, project_name=project_name,
+            tracks=tracks, canonical={track.id: track for track in tracks},
+            snapshot=snapshot,
+        )
+    except BaseException:
+        snapshot.close()
+        raise
+
 
 
 def audit_vectors(context: EvaluationContext) -> dict[str, Any]:
@@ -558,6 +555,8 @@ def _aggregate(rounds: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def run(round_count: int, cases_per_round: int, settings: Settings) -> dict[str, Any]:
+    if round_count < 1 or cases_per_round < 1:
+        raise ValueError("round_count and cases_per_round must be >= 1")
     context = build_context(settings)
     try:
         rounds = []
@@ -604,7 +603,10 @@ def run(round_count: int, cases_per_round: int, settings: Settings) -> dict[str,
             "rounds": rounds,
         }
     finally:
-        context.store.close()
+        if context.snapshot is not None:
+            context.snapshot.close()
+        else:
+            context.store.close()
 
 
 def _markdown_table(headers: list[str], rows: list[list[Any]]) -> str:
@@ -620,7 +622,7 @@ def render_report(payload: dict[str, Any], json_path: Path) -> str:
     scope = payload["evaluation_scope"]
     rounds = payload["rounds"]
     lines = [
-        "# DropIt 七轮质量评测报告",
+        f"# DropIt {len(rounds)} 轮质量评测报告",
         "",
         f"> 生成时间：`{payload['generated_at']}`。原始逐用例结果见 [{json_path.name}]({json_path.name})。",
         "",
@@ -639,14 +641,14 @@ def render_report(payload: dict[str, Any], json_path: Path) -> str:
         "",
         "可用于项目描述的严格表述：",
         "",
-        f"> 完成 `{aggregate['vectorized_tracks']}` 首歌曲的有效向量化入库；在 7 轮、"
+        f"> 完成 `{aggregate['vectorized_tracks']}` 首歌曲的有效向量化入库；在 {len(rounds)} 轮、"
         f"`{aggregate['intent_total']}` 次意图判定、`{aggregate['tool_total']}` 次合法工具调用和 "
         f"`{aggregate['rag_queries']}` 次真实向量检索中，意图路由准确率达到 "
         f"`{aggregate['intent_accuracy_pct']:.2f}%`，工具调用成功率达到 "
         f"`{aggregate['tool_success_rate_pct']:.2f}%`，RAG Top-3 调用准确性与证据真实性分别达到 "
         f"`{aggregate['rag_accuracy_pct']:.2f}%` 和 `{aggregate['rag_truthfulness_pct']:.2f}%`。",
         "",
-        "## 七轮结果",
+        f"## {len(rounds)} 轮结果",
         "",
         _markdown_table(
             ["轮次", "有效向量", "意图准确率", "工具成功率", "RAG Hit@3", "RAG 真实性"],
@@ -657,27 +659,27 @@ def render_report(payload: dict[str, Any], json_path: Path) -> str:
         "",
         "## 结果解读",
         "",
-        "意图路由每轮固定错 4 条：1 条隐式曲库查询、2 条隐式接歌请求和 1 条外部实时榜单请求。它们均未命中关键词规则，且 Ollama 未返回有效 JSON，于是系统按设计安全降级为 `music_chat`。因此 84.00% 是稳定、可复现的系统性边界，而不是偶发抖动。优先修复方向是约束 Ollama 的结构化输出兼容性，并补充这些表达的规则或训练样本。",
+        f"本次意图准确率 {aggregate['intent_accuracy_pct']:.2f}%，共错 {aggregate['intent_total'] - aggregate['intent_passed']} 条；具体输入、路由来源和错误见逐用例结果，不能仅凭总分推断错误原因。",
         "",
-        "工具与 RAG 的 100% 表示本次合法用例和索引闭环全部通过，并不表示任意线上输入都必然成功。尤其 RAG 使用原描述自检索，适合验证索引链路，不应包装成开放式语义检索的人工相关性准确率。",
+        "工具与 RAG 的分数表示本次合法用例和索引闭环的通过比例，并不表示任意线上输入都必然成功。尤其 RAG 使用原描述自检索，适合验证索引链路，不应包装成开放式语义检索的人工相关性准确率。",
         "",
         "## 总体测试方法与思路",
         "",
-        "评测固定生产代码、当前 `.env` 中的模型名和当前 SQLite/Chroma 数据快照。脚本只读生产曲库；`generate_dj_set` 的保存动作由内存代理截获，因此不会向生产数据库写入评测歌单。每轮按以下顺序执行：",
+        "评测固定生产代码、当前 `.env` 中的模型名和当前 SQLite/Chroma 数据快照。脚本复制 SQLite/Chroma 后只操作临时快照；`generate_dj_set` 的保存动作由内存代理截获，因此不会向生产数据库写入评测歌单。每轮按以下顺序执行：",
         "",
         "1. **向量完整性审计**：读取 `analysis_status=analyzed`、`embedding_status=ready` 且模型 key 与当前配置一致的歌曲，再与 Chroma 实际向量取交集；检查维度、有限值和非零范数。",
         "2. **意图路由**：对 `search_library`、`find_similar_tracks`、`generate_dj_set`、`music_chat`、`overstep` 各 5 条标注语句进行 exact-match，并保留实际标签、置信度和规则/Ollama 来源。",
         "3. **工具调用**：执行 8 个合法用例，覆盖三个 Tool、空结果、语义搜索、范围过滤和 Set 约束；只有 `ToolResult.ok=true` 且输出契约复核通过才计成功。",
-        "4. **RAG 准确性**：每轮选择不同的 5 首已索引歌曲，以其已入库描述发起新的真实 DashScope 查询；目标歌曲进入 Top-3 计为命中。该指标验证 embedding API、模型版本、Chroma 读取、项目作用域和余弦排序的整条链路。",
+        "4. **RAG 准确性**：每轮按配置数量轮转选择已索引歌曲，以其已入库描述发起新的真实 DashScope 查询；目标歌曲进入 Top-3 计为命中。该指标验证 embedding API、模型版本、Chroma 读取、项目作用域和余弦排序的整条链路。",
         "5. **RAG 真实性**：把每个返回结果的 12 个可见事实原子与 SQLite 源记录逐字段比较。真实性只衡量可自动验证的检索证据，不把模型主观文案当事实。",
         "",
         "这种 RAG 准确率属于**索引闭环/自检索 Hit@3**，能证明技术链路正确，但不能替代人工构建的自然语言相关性数据集；若要宣称开放式用户查询准确率，应另建独立 query→relevant track 标注集。",
         "",
-        "## 两轮完整测试链路",
+        "## 首尾轮完整测试链路",
         "",
     ]
 
-    for detail in (rounds[0], rounds[-1]):
+    for detail in (rounds[:1] if len(rounds) == 1 else [rounds[0], rounds[-1]]):
         lines.extend([
             f"### 第 {detail['round']} 轮",
             "",
@@ -707,7 +709,7 @@ def render_report(payload: dict[str, Any], json_path: Path) -> str:
             "",
             "#### C. 工具链路",
             "",
-            "`合法参数 → LangChain Tool schema → 业务函数 → ToolResult → 输出契约/项目范围/约束复核`",
+            "`合法参数 → Registry / Set 规划函数 → ToolResult → 输出契约/项目范围/约束复核`",
             "",
             _markdown_table(
                 ["ID", "工具", "参数", "返回", "契约", "摘要", "结果"],
@@ -741,7 +743,7 @@ def render_report(payload: dict[str, Any], json_path: Path) -> str:
         "## 复现",
         "",
         "```powershell",
-        "python -m backend.evals.run_quality_eval --rounds 7",
+        f"python -m backend.evals.run_quality_eval --rounds {len(rounds)} --rag-cases-per-round {scope['rag_cases_per_round']}",
         "```",
         "",
         "需要当前项目依赖、可访问的 Ollama、`DASHSCOPE_API_KEY`，以及 `data/dropit.db` 与 `data/chroma`。脚本不会输出任何密钥。网络或模型服务失败会作为该轮失败记录进入 JSON，而不会被静默跳过。",
@@ -753,15 +755,27 @@ def render_report(payload: dict[str, Any], json_path: Path) -> str:
         "- 工具成功率只纳入合法请求。越权 ID、非法范围等请求被正确拒绝属于安全测试通过，不应混入合法调用成功率分母。",
         "- RAG 真实性核验的是 Tool 返回证据，不等同于任意生成式回答的事实正确率。",
     ])
+    if payload.get("agent_eval"):
+        agent = payload["agent_eval"]
+        lines.extend(["", "## Agent 端到端评测（独立结果）", "",
+                      f"来源：{agent['path']}；模式：{agent['execution_mode']}；生成时间：{agent['generated_at']}。"])
+        for name, metric in agent["metrics"].items():
+            if isinstance(metric, dict) and "value_pct" in metric:
+                lines.append(f"- {name}: {metric['value_pct']}%")
+        lines.append("组件分数与端到端分数分开报告，不合并分母；fixture 模式不是线上质量证据。")
     return "\n".join(lines) + "\n"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--env-file", type=Path)
+    parser.add_argument("--data-dir", type=Path)
+    parser.add_argument("--chroma-dir", type=Path)
+    parser.add_argument("--agent-eval-json", type=Path, help="Attach existing Agent eval metrics; does not run it.")
     parser.add_argument("--rounds", type=int, default=7)
     parser.add_argument("--rag-cases-per-round", type=int, default=5)
-    parser.add_argument("--json-out", type=Path, default=Path("docs/quality-eval-7-rounds.json"))
-    parser.add_argument("--report-out", type=Path, default=Path("docs/quality-eval-7-rounds.md"))
+    parser.add_argument("--json-out", type=Path, default=Path("eval-results/quality-eval.json"))
+    parser.add_argument("--report-out", type=Path, default=Path("eval-results/quality-eval.md"))
     return parser.parse_args()
 
 
@@ -771,7 +785,11 @@ def main() -> None:
         raise SystemExit("--rounds 必须至少为 1")
     if args.rag_cases_per_round < 1:
         raise SystemExit("--rag-cases-per-round 必须至少为 1")
-    payload = run(args.rounds, args.rag_cases_per_round, Settings())
+    agent_payload = json.loads(args.agent_eval_json.read_text(encoding="utf-8")) if args.agent_eval_json else None
+    payload = run(args.rounds, args.rag_cases_per_round, evaluation_settings(args))
+    if agent_payload is not None:
+        payload["agent_eval"] = {"path": str(args.agent_eval_json), "generated_at": agent_payload.get("generated_at"),
+                                 "execution_mode": agent_payload.get("execution_mode"), "metrics": agent_payload["metrics"]}
     args.json_out.parent.mkdir(parents=True, exist_ok=True)
     args.report_out.parent.mkdir(parents=True, exist_ok=True)
     args.json_out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -163,8 +163,9 @@ completed
 预计时间
 实现日期：2026-09-21。
 4. 评测没有覆盖完整任务、效率和成本
-- 待解决
-现在是什么
+- 已完成（P0 item 4；评测实现与离线回归已完成，真实模型质量需另行运行 live 评测）
+实现与使用说明见 [Agent Eval 2.0](agent-eval-2.0.md)。评测已对接 main 的受控 LangGraph、Set 校验/修复和持久化 checkpoint。
+完成前问题
 现有评测已经覆盖：
 - 意图准确率
 - 工具成功率
@@ -181,11 +182,13 @@ completed
 - 失败发生在哪个节点
 要改什么
 新增：
-backend/evals/cases/agent_tasks.jsonl
-backend/evals/run_agent_eval.py
+backend/src/evals/cases/agent_tasks.jsonl
+backend/src/evals/run_agent_eval.py
+backend/src/evals/runtime.py
+backend/src/evals/tracing.py
 backend/src/tests/test_agent_eval.py
 扩展：
-backend/evals/run_quality_eval.py
+backend/src/evals/run_quality_eval.py
 改成什么
 建立 60 条真实任务：
 15 条搜索
@@ -289,4 +292,4 @@ Long-term Preference Memory
 4. Eval 2.0 与 Run Trace
 5. 三层 Memory
 总工期：约 6～8 个专注工作日。
-当前进度：第 1～3 项已完成；下一步按顺序处理第 4 项 Eval 2.0 与 Run Trace。
+当前进度：第 1～4 项已完成；下一步按顺序处理第 5 项三层 Memory。Eval 的真实模型质量分数以 live 运行产物为准，不以 fixture 测试分数替代。

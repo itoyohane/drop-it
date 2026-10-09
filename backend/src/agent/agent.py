@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 import asyncio
 import json
 import logging
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 
 from langchain_openai import ChatOpenAI
@@ -41,7 +41,8 @@ class DropItAgent:
 
     def __init__(self, store: DropItStore, registry: DropItToolRegistry, settings: Settings,
                  *, memory: ShortTermMemory | None = None,
-                 intent: IntentRecognizer | None = None):
+                 intent: IntentRecognizer | None = None,
+                 trace_callback: Callable[[dict[str, Any]], None] | None = None):
         self.store, self.registry, self.settings = store, registry, settings
         self.memory = memory or ShortTermMemory(
             max_messages=settings.agent_memory_max_messages,
@@ -54,6 +55,7 @@ class DropItAgent:
             reserved_tokens=settings.agent_context_reserved_tokens,
         )
         self.intent = intent or IntentRecognizer()
+        self.trace_callback = trace_callback
         self.model_configured = settings.model_configured
         # The topology is immutable and compiled once for this facade instance.
         self.graph = build_graph()
@@ -203,8 +205,10 @@ class DropItAgent:
                         if content:
                             yield "token", content
                     continue
-                for _, delta in self._update_entries(update):
+                for node, delta in self._update_entries(update):
                     final_state.update(delta)
+                    if self.trace_callback is not None:
+                        self.trace_callback({"node": node, "state": dict(final_state), "delta": delta})
                     for event in delta.get("tool_events", []):
                         record = event if isinstance(event, ToolEvent) else ToolEvent.model_validate(event)
                         identity = record.model_dump_json()
