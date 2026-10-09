@@ -18,17 +18,42 @@ from backend.evals.run_agent_eval import (
     TraceBuilder,
     parse_thresholds,
     validate_set_constraints,
+    validate_case,
 )
 
 
-def test_agent_case_dataset_is_exactly_60_and_balanced():
+def test_agent_capability_dataset_excludes_set_planning():
     cases = load_cases()
-    assert len(cases) == 60
+    assert len(cases) == 37
     assert {category: sum(row["category"] == category for row in cases)
-            for category in ("search", "similar", "set", "multi_turn", "overstep")} == {
-                "search": 15, "similar": 10, "set": 20, "multi_turn": 10, "overstep": 5,
+            for category in ("search", "similar", "multi_turn", "overstep")} == {
+                "search": 15, "similar": 10, "multi_turn": 7, "overstep": 5,
             }
     assert all(row["core"] is False or row["repeats"] == 3 for row in cases)
+    assert sum(row["repeats"] for row in cases) == 51
+    assert not {"context-03", "context-06", "context-08"} & {row["id"] for row in cases}
+    assert all("generate_dj_set" not in row["expected_tool_sequence"] for row in cases)
+
+
+@pytest.mark.parametrize("replacement", [
+    {"expected_command": "generate_dj_set"},
+    {"expected_tool_sequence": ["generate_dj_set"]},
+    {"expected_graph_nodes": ["retrieve_candidates", "plan_set"]},
+    {"tool_argument_assertions": [{"tool": "generate_dj_set", "path": "duration_min", "op": "eq", "value": 45}]},
+])
+def test_case_validation_rejects_hidden_set_planning(replacement):
+    case = load_cases()[0] | replacement
+    with pytest.raises(CaseValidationError, match="Set planning"):
+        validate_case(case)
+
+
+def test_agent_only_report_marks_set_metrics_not_applicable():
+    payload = evaluate_cases(load_cases(), FixtureTraceRunner())
+    assert payload["metrics"]["set_constraint_pass_rate"] == {
+        "status": "not_applicable", "value_pct": None, "passed": 0, "total": 0,
+    }
+    assert payload["metrics"]["repair_success_rate"]["status"] == "not_applicable"
+    assert "| set_constraint_pass_rate | N/A | 0/0 |" in render_markdown(payload)
 
 
 def test_template_resolution_preserves_fixture_types_and_never_requires_real_track_id():
@@ -82,8 +107,10 @@ def test_argument_subset_and_unauthorized_interception():
     case = load_cases()[-1]
     evaluation = evaluate_trace(case, {"command": "overstep", "tool_calls": [], "completed": True, "intercepted": True})
     assert evaluation["interception_passed"] is True
-    set_case = next(row for row in load_cases() if row["id"] == "set-09")
-    resolved = resolve_templates(set_case, make_fixtures())
+    # Keep a synthetic scorer regression without reintroducing a live Set case.
+    resolved = {"expected_command": "generate_dj_set", "expected_tool_sequence": ["generate_dj_set"],
+                "tool_argument_assertions": [{"tool": "generate_dj_set", "path": "track_ids",
+                                              "op": "subset_of", "value": []}]}
     evaluation = evaluate_trace(resolved, {"command": "generate_dj_set", "tool_calls": [{"name": "generate_dj_set", "arguments": {"track_ids": []}}], "completed": True, "intercepted": False, "constraints_passed": True})
     assert evaluation["argument_passed"] is True
 

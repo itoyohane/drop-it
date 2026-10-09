@@ -48,6 +48,50 @@ def test_live_search_records_real_nodes_arguments_checkpoints_and_usage(library)
     assert runner.agent.trace_callback is None
 
 
+def test_agent_only_runner_stops_misrouted_set_before_graph_execution(library, monkeypatch):
+    runner = runner_for(library, [])
+    runner.allow_set_execution = False
+    closed = []
+
+    async def misrouted_stream(project_id, conversation_id, text, *, run_id=None):
+        try:
+            yield {"type": "status", "intent": "generate_dj_set"}
+            pytest.fail("Agent-only eval must not execute the misrouted Set graph")
+        finally:
+            closed.append(True)
+
+    monkeypatch.setattr(runner.agent, "stream_chat", misrouted_stream)
+    task = case("曲库中有哪些适合暖场的歌曲？", "search_library", ["search_library"], [])
+    trace = runner.run(task)
+    assert closed == [True]
+    assert trace["command"] == "generate_dj_set"
+    assert trace["error_code"] == "out_of_scope_route"
+    assert trace["failure_node"] == "route"
+    assert trace["tool_calls"] == []
+    assert evaluate_trace(task, trace)["task_completed"] is False
+
+
+def test_scope_rejection_closes_production_stream_and_releases_claim(library, monkeypatch):
+    store, project, *_ = library
+    runner = runner_for(library, [])
+    runner.allow_set_execution = False
+
+    async def forbidden_graph(*args, **kwargs):
+        pytest.fail("Set graph must not start after scope rejection")
+        yield
+
+    monkeypatch.setattr(runner.agent, "_run_graph", forbidden_graph)
+    task = case("曲库中有哪些适合暖场的歌曲？", "search_library", ["search_library"], [])
+    trace = runner.run(task)
+
+    assert trace["error_code"] == "out_of_scope_route", trace
+    assert trace["graph_steps"] == []
+    run = store.get_agent_run(trace["turn_traces"][0]["run_id"])
+    assert run["claim_owner"] is None
+    assert store.list_playlists(project.id) == []
+    assert evaluate_trace(task, trace)["task_completed"] is False
+
+
 def test_live_similar_resolves_title_without_fabricated_search_call(library):
     store, project, *_ = library
     add_track(store, project, "Signal", [1, 0, 0])

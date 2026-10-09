@@ -66,6 +66,8 @@ def test_cli_round_override_progress_incremental_traces_and_threshold_exit(tmp_p
     assert payload["run_count"] == 2
     assert payload["rounds_override"] == 2
     assert payload["execution_mode"] == "fixture"
+    assert payload["evaluation_scope"]["profile"] == "agent_capabilities"
+    assert payload["evaluation_scope"]["excluded_capabilities"] == ["set_planning"]
     assert len(output.with_suffix(".runs.jsonl").read_text(encoding="utf-8").splitlines()) == 2
     assert "fixture" in report.read_text(encoding="utf-8")
     with pytest.raises(FileExistsError):
@@ -136,6 +138,7 @@ def test_live_builder_selects_current_vector_scope_and_cleans_up_on_failure(libr
         assert set(runner.fixtures["track_ids"]) == {"Echo", "Signal"}
         assert runner.project_id == project.id
         assert runner.agent.intent.fallback is None
+        assert runner.allow_set_execution is False
         runner.close()
     else:
         with pytest.raises(RuntimeError, match="at least two"):

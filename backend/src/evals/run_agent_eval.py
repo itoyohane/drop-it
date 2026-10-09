@@ -1,10 +1,11 @@
-"""Evaluate production LangGraph tasks, typed commands, validation and repair."""
+"""Evaluate Agent routing, typed commands, retrieval, context and safety."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
 from collections import Counter, defaultdict
+from contextlib import aclosing
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import json
@@ -17,7 +18,9 @@ from uuid import uuid4
 
 
 CASES_PATH = Path(__file__).with_name("cases") / "agent_tasks.jsonl"
-CASE_CATEGORIES = ("search", "similar", "set", "multi_turn", "overstep")
+CASE_COUNTS = {"search": 15, "similar": 10, "multi_turn": 7, "overstep": 5}
+CASE_CATEGORIES = tuple(CASE_COUNTS)
+SET_GRAPH_NODES = {"retrieve_candidates", "plan_set", "validate_set", "repair_set", "persist_set"}
 REQUIRED_CASE_FIELDS = {
     "id", "category", "turns", "expected_command", "expected_tool_sequence",
     "tool_argument_assertions", "expected_completion", "expected_interception",
@@ -94,6 +97,11 @@ def validate_case(case: Mapping[str, Any]) -> None:
     for assertion in case["tool_argument_assertions"]:
         if not isinstance(assertion, dict) or not {"tool", "path", "op", "value"} <= set(assertion):
             raise CaseValidationError(f"{case['id']}: malformed argument assertion")
+    if (case["expected_command"] == "generate_dj_set"
+            or "generate_dj_set" in case["expected_tool_sequence"]
+            or SET_GRAPH_NODES.intersection(case["expected_graph_nodes"])
+            or any(item["tool"] == "generate_dj_set" for item in case["tool_argument_assertions"])):
+        raise CaseValidationError(f"{case['id']}: Set planning is outside the Agent capability suite")
     if not isinstance(case["repeats"], int) or case["repeats"] < 1:
         raise CaseValidationError(f"{case['id']}: repeats must be >= 1")
     if case["core"] and case["repeats"] != 3:
@@ -101,7 +109,7 @@ def validate_case(case: Mapping[str, Any]) -> None:
 
 
 def load_cases(path: str | Path = CASES_PATH) -> list[dict[str, Any]]:
-    """Load and validate the fixed 60-case dataset."""
+    """Load and validate the fixed 37-case Agent capability dataset."""
     source = Path(path)
     rows: list[dict[str, Any]] = []
     for line_number, line in enumerate(source.read_text(encoding="utf-8").splitlines(), 1):
@@ -116,14 +124,14 @@ def load_cases(path: str | Path = CASES_PATH) -> list[dict[str, Any]]:
         validate_case(case)
         rows.append(case)
     ids = [case["id"] for case in rows]
-    if len(rows) != 60:
-        raise CaseValidationError(f"expected exactly 60 cases, got {len(rows)}")
+    expected_count = sum(CASE_COUNTS.values())
+    if len(rows) != expected_count:
+        raise CaseValidationError(f"expected exactly {expected_count} cases, got {len(rows)}")
     if len(set(ids)) != len(ids):
         raise CaseValidationError("case IDs must be unique")
     counts = Counter(case["category"] for case in rows)
-    expected = {"search": 15, "similar": 10, "set": 20, "multi_turn": 10, "overstep": 5}
-    if dict(counts) != expected:
-        raise CaseValidationError(f"case distribution mismatch: {dict(counts)} != {expected}")
+    if dict(counts) != CASE_COUNTS:
+        raise CaseValidationError(f"case distribution mismatch: {dict(counts)} != {CASE_COUNTS}")
     return rows
 
 
@@ -532,7 +540,11 @@ def compute_metrics(results: Iterable[Mapping[str, Any]], *, input_price_per_mil
         },
         "graph_sequence_accuracy": {"value_pct": _rate(sum(bool(x.get("graph_sequence_passed")) for x in evaluated), total), "passed": sum(bool(x.get("graph_sequence_passed")) for x in evaluated), "total": total},
         "task_completion_rate": {"value_pct": _rate(completion_n, total), "passed": completion_n, "total": total},
-        "set_constraint_pass_rate": {"value_pct": _rate(sum(bool(x.get("set_constraints_passed")) for x in sets), len(sets)), "passed": sum(bool(x.get("set_constraints_passed")) for x in sets), "total": len(sets)},
+        "set_constraint_pass_rate": {
+            "status": "available" if sets else "not_applicable",
+            "value_pct": _rate(sum(bool(x.get("set_constraints_passed")) for x in sets), len(sets)) if sets else None,
+            "passed": sum(bool(x.get("set_constraints_passed")) for x in sets), "total": len(sets),
+        },
         "unauthorized_action_block_rate": {"value_pct": _rate(sum(bool(x.get("interception_passed")) for x in oversteps), len(oversteps)), "passed": sum(bool(x.get("interception_passed")) for x in oversteps), "total": len(oversteps)},
         "stability": {"value_pct": _rate(stable, len(stable_groups)), "stable_groups": stable, "total_groups": len(stable_groups)},
         "latency_ms": {"p50": _percentile(latencies, 50), "p95": _percentile(latencies, 95), "sample_count": len(latencies)},
@@ -603,7 +615,7 @@ def render_markdown(payload: Mapping[str, Any], *, baseline: Mapping[str, Any] |
             result = ((f"{item['total_tokens']} tokens" if item["status"] != "unavailable" else "unavailable") if name == "token_usage" else ("unavailable" if item["total"] is None else f"${item['total']:.8f}"))
             denominator = item.get("runs", "—")
         else:
-            result = f"{item.get('value_pct', 0):.2f}%"
+            result = "N/A" if item.get("value_pct") is None else f"{item['value_pct']:.2f}%"
             denominator = f"{item.get('passed', item.get('stable_groups', '—'))}/{item.get('total', item.get('total_groups', '—'))}"
         lines.append(f"| {name} | {result} | {denominator} |")
     pricing = payload.get("pricing", {})
@@ -623,6 +635,8 @@ def render_markdown(payload: Mapping[str, Any], *, baseline: Mapping[str, Any] |
             for (code, node), count in sorted(failures.items())
         )
     execution_mode = payload.get("execution_mode", "unknown")
+    if payload.get("evaluation_scope", {}).get("profile") == "agent_capabilities":
+        lines.extend(["", "Agent capability suite excludes Set planning; misrouted Set requests are stopped before graph execution and scored as failures."])
     lines.extend(["", "Chat-model usage/cost excludes embedding and intent-classification requests; partial usage is a known subtotal, not a complete bill."])
     lines.extend(["", "Stability measures consistency across repeats, not task success."])
     lines.extend(["", "## Boundaries", "", f"- Current execution mode is `{execution_mode}`; live traces contain actual compiled LangGraph node updates.", "- Token usage is `unavailable` when provider metadata is missing. Estimated cost remains null unless both input and output prices are explicitly supplied.", f"- Pricing note: {pricing.get('note', 'caller supplied pricing')}"])
@@ -712,7 +726,8 @@ def _build_live_runner(settings: Any, project_id: str | None = None) -> "LiveAge
                     if settings.intent_fallback_enabled else None)
         registry = DropItToolRegistry(store, embedder)
         agent = DropItAgent(store, registry, settings, intent=IntentRecognizer(fallback=fallback))
-        runner = LiveAgentRunner(agent, store, selected_id, ready, tracks, snapshot=snapshot)
+        runner = LiveAgentRunner(agent, store, selected_id, ready, tracks,
+                                 snapshot=snapshot, allow_set_execution=False)
         runner.metadata = {"project_id": selected_id, "chat_model": settings.model_name,
                            "embedding_model": embedder.model_key,
                            "intent_model": settings.ollama_model if fallback else None,
@@ -729,9 +744,11 @@ class LiveAgentRunner:
     execution_mode = "langgraph"
 
     def __init__(self, agent: Any, store: Any, project_id: str,
-                 reference_tracks: Iterable[Any], tracks: Iterable[Any], *, snapshot: Any = None):
+                 reference_tracks: Iterable[Any], tracks: Iterable[Any], *, snapshot: Any = None,
+                 allow_set_execution: bool = True):
         self.agent, self.store, self.project_id = agent, store, project_id
         self.snapshot = snapshot
+        self.allow_set_execution = allow_set_execution
         self.tracks_by_id = {track.id: track for track in tracks}
         self.project_track_ids = set(self.tracks_by_id)
         self.fixtures = make_fixtures([track.model_dump(mode="json") for track in reference_tracks])
@@ -797,38 +814,46 @@ class LiveAgentRunner:
                         failure_node = update["node"]
 
                 self.agent.trace_callback = observe
-                async for event in self.agent.stream_chat(
+                async with aclosing(self.agent.stream_chat(
                     self.project_id, conversation.id, turn["user"], run_id=turn_run_id,
-                ):
-                    if event["type"] == "status" and event.get("intent"):
-                        trace.command = event["intent"]
-                    elif event["type"] == "complete":
-                        completed = True
-                        trace.output = event
-                        code = event.get("error_code")
-                        if code:
+                )) as stream:
+                    async for event in stream:
+                        if event["type"] == "status" and event.get("intent"):
+                            trace.command = event["intent"]
+                            if trace.command == "generate_dj_set" and not self.allow_set_execution:
+                                turn_error = "out_of_scope_route"
+                                failure_node = failure_node or "route"
+                                state.update({"route": trace.command, "error_code": turn_error})
+                                record_error("scope", index, "route", turn_error)
+                                trace.output = {"type": "scope_rejection", "error_code": turn_error}
+                                break
+                        elif event["type"] == "complete":
+                            completed = True
+                            trace.output = event
+                            code = event.get("error_code")
+                            if code:
+                                record_error(
+                                    "complete", index,
+                                    "graph" if code == "graph_failed" else "complete", code,
+                                )
+                                if code == "graph_failed":
+                                    turn_graph_failed = True
+                                    turn_error = code
+                                    failure_node = "graph"
+                                elif not turn_graph_failed:
+                                    turn_error = code
+                        elif event["type"] == "error":
+                            code = event.get("error_code") or "agent_error"
                             record_error(
-                                "complete", index,
-                                "graph" if code == "graph_failed" else "complete", code,
+                                "stream", index,
+                                "graph" if code == "graph_failed" else "stream", code,
                             )
                             if code == "graph_failed":
                                 turn_graph_failed = True
                                 turn_error = code
                                 failure_node = "graph"
-                            elif not turn_graph_failed:
+                            elif not turn_graph_failed and turn_error is None:
                                 turn_error = code
-                    elif event["type"] == "error":
-                        code = event.get("error_code") or "agent_error"
-                        record_error(
-                            "stream", index,
-                            "graph" if code == "graph_failed" else "stream", code,
-                        )
-                        if code == "graph_failed":
-                            turn_graph_failed = True
-                            turn_error = code
-                            failure_node = "graph"
-                        elif not turn_graph_failed and turn_error is None:
-                            turn_error = code
 
                 command = dict(_model_mapping(state.get("command")) or {})
                 arguments = dict(command)
@@ -946,7 +971,10 @@ def main() -> int:
                 rounds=args.rounds, on_result=record,
             )
         payload["rounds_override"] = args.rounds
-        payload["evaluation_scope"] = getattr(runner, "metadata", {})
+        payload["evaluation_scope"] = {
+            **getattr(runner, "metadata", {}), "profile": "agent_capabilities",
+            "excluded_capabilities": ["set_planning"],
+        }
         payload["baseline_comparison"] = compare_baseline(payload, baseline)
         payload["thresholds"] = {"configured": thresholds, **check_thresholds(payload["metrics"], thresholds)}
         for path in (args.json_out, args.report_out):

@@ -60,11 +60,16 @@ def test_report_and_component_execution_follow_current_registry_and_round_count(
     assert payload["rounds"][0]["tools"]["total"] == 8
     assert payload["rounds"][0]["rag"]["queries"] == 2
     payload["agent_eval"] = {"path": "agent.json", "generated_at": "now", "execution_mode": "fixture",
-                             "metrics": {"task_completion_rate": {"value_pct": 50}}}
+                             "metrics": {"task_completion_rate": {"value_pct": 50},
+                                         "set_constraint_pass_rate": {"value_pct": None},
+                                         "repair_success_rate": {"value_pct": None}}}
     report = quality.render_report(payload, Path("quality.json"))
     assert "# DropIt 1 轮质量评测报告" in report
     assert report.count("### 第 1 轮") == 1
     assert "LangChain Tool schema" not in report
     assert "意图路由每轮固定错" not in report
     assert "task_completion_rate: 50%" in report
+    assert "set_constraint_pass_rate: N/A" in report
+    assert "repair_success_rate: N/A" in report
+    assert "None%" not in report
     assert "--rounds 1 --rag-cases-per-round 2" in report

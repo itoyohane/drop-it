@@ -761,7 +761,8 @@ def render_report(payload: dict[str, Any], json_path: Path) -> str:
                       f"来源：{agent['path']}；模式：{agent['execution_mode']}；生成时间：{agent['generated_at']}。"])
         for name, metric in agent["metrics"].items():
             if isinstance(metric, dict) and "value_pct" in metric:
-                lines.append(f"- {name}: {metric['value_pct']}%")
+                value = "N/A" if metric["value_pct"] is None else f"{metric['value_pct']}%"
+                lines.append(f"- {name}: {value}")
         lines.append("组件分数与端到端分数分开报告，不合并分母；fixture 模式不是线上质量证据。")
     return "\n".join(lines) + "\n"
 
