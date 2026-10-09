@@ -63,6 +63,26 @@ def test_live_similar_resolves_title_without_fabricated_search_call(library):
     assert evaluate_trace(task, trace)["task_completed"] is True
 
 
+def test_full_agent_set_parameter_extraction_error_does_not_recurse(library, monkeypatch):
+    import backend.agent.graph as graph
+
+    async def fail_extraction(*args, **kwargs):
+        raise RuntimeError("structured command unavailable")
+
+    monkeypatch.setattr(graph, "extract_command", fail_extraction)
+    runner = runner_for(library, ["参数提取失败，未生成歌单。"])
+    task = case("生成一个 DJ Set", "generate_dj_set", ["generate_dj_set"], [])
+
+    trace = runner.run(task)
+
+    assert trace["error_code"] == "candidate_retrieval_failed"
+    assert trace["failure_node"] == "retrieve_candidates"
+    assert trace["output"]["error_code"] == "candidate_retrieval_failed"
+    assert "graph_failed" not in [item["error_code"] for item in trace["error_chain"]]
+    store, project, *_ = library
+    assert store.list_playlists(project.id) == []
+
+
 @pytest.mark.parametrize("required,success", [(None, True), (["missing"], False)])
 def test_set_validation_and_bounded_repair_are_observed(library, required, success):
     store, project, *_ = library
@@ -102,6 +122,8 @@ def test_multi_turn_uses_distinct_run_ids_and_keeps_earlier_set_constraints(libr
     assert trace["command"] == "search_library"
     assert trace["turn_traces"][1]["error_code"] is None
     assert trace["constraints_passed"] is False
+    assert any(item["turn"] == 1 and item["error_code"] == "constraint_conflict"
+               for item in trace["error_chain"])
     assert evaluate_trace(task, trace)["task_completed"] is False
 
 
@@ -114,6 +136,89 @@ def test_missing_reference_preserves_actual_failure_node(library):
     assert trace["failure_node"] == "resolve_reference"
     assert trace["error_code"] is not None
     assert evaluate_trace(task, trace)["failure_node"] == "resolve_reference"
+
+
+def test_graph_failed_is_primary_and_retains_observed_node_error(library, monkeypatch):
+    store, project, _, _, registry = library
+    agent = DropItAgent(
+        store, registry, Settings(_env_file=None, DEEPSEEK_API_KEY="test-only"),
+        intent=IntentRecognizer(),
+    )
+    runner = LiveAgentRunner(agent, store, project.id, [], [])
+
+    async def failed_stream(project_id, conversation_id, text, *, run_id=None):
+        agent.trace_callback({
+            "node": "retrieve_candidates",
+            "state": {
+                "route": "generate_dj_set", "repair_attempts": 0,
+                "tool_events": [], "error_code": "candidate_retrieval_failed",
+            },
+            "delta": {"error_code": "candidate_retrieval_failed"},
+        })
+        yield {"type": "error", "error_code": "graph_failed", "detail": "graph crashed"}
+        yield {
+            "type": "complete", "error_code": "graph_failed", "playlist": None,
+            "message": {"tool_events": []},
+        }
+
+    monkeypatch.setattr(agent, "stream_chat", failed_stream)
+    task = case("生成一个 Set", "generate_dj_set", ["generate_dj_set"], [])
+    trace = runner.run(task)
+
+    assert trace["error_code"] == "graph_failed"
+    assert trace["failure_node"] == "graph"
+    assert trace["turn_traces"][0]["error_code"] == "graph_failed"
+    assert trace["error_chain"] == [
+        {"source": "node", "turn": 1, "node": "retrieve_candidates",
+         "error_code": "candidate_retrieval_failed"},
+        {"source": "stream", "turn": 1, "node": "graph", "error_code": "graph_failed"},
+        {"source": "complete", "turn": 1, "node": "graph", "error_code": "graph_failed"},
+    ]
+    evaluation = evaluate_trace(task, trace)
+    assert evaluation["error_code"] == "graph_failed"
+    assert evaluation["failure_node"] == "graph"
+
+
+def test_later_graph_failure_overrides_but_retains_earlier_turn_failure(library, monkeypatch):
+    store, project, _, _, registry = library
+    agent = DropItAgent(
+        store, registry, Settings(_env_file=None, DEEPSEEK_API_KEY="test-only"),
+        intent=IntentRecognizer(),
+    )
+    runner = LiveAgentRunner(agent, store, project.id, [], [])
+    stream_call = 0
+
+    async def failed_second_turn(project_id, conversation_id, text, *, run_id=None):
+        nonlocal stream_call
+        stream_call += 1
+        if stream_call == 1:
+            node, code = "search_library", "search_failed"
+            yield_code = code
+        else:
+            node, code = "retrieve_candidates", "candidate_retrieval_failed"
+            yield_code = "graph_failed"
+        agent.trace_callback({
+            "node": node,
+            "state": {"route": "search_library", "tool_events": [], "error_code": code},
+            "delta": {"error_code": code},
+        })
+        if stream_call == 2:
+            yield {"type": "error", "error_code": "graph_failed", "detail": "graph crashed"}
+        yield {"type": "complete", "error_code": yield_code, "message": {"tool_events": []}}
+
+    monkeypatch.setattr(agent, "stream_chat", failed_second_turn)
+    task = case("搜歌", "search_library", [], [])
+    task["turns"].append({"user": "生成一个 DJ Set"})
+    trace = runner.run(task)
+
+    assert trace["error_code"] == "graph_failed"
+    assert trace["failure_node"] == "graph"
+    assert any(item["turn"] == 1 and item["error_code"] == "search_failed"
+               for item in trace["error_chain"])
+    assert any(item["turn"] == 2 and item["error_code"] == "candidate_retrieval_failed"
+               for item in trace["error_chain"])
+    assert any(item["turn"] == 2 and item["source"] == "complete"
+               and item["error_code"] == "graph_failed" for item in trace["error_chain"])
 
 
 def test_successful_repair_is_measured_from_actual_graph(library, monkeypatch):

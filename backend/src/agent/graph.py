@@ -136,7 +136,7 @@ async def extract_command(model: Any, route: str, history: list[dict[str, str]],
     with_structured_output = getattr(model, "with_structured_output", None)
     if with_structured_output is not None:
         try:
-            structured = with_structured_output(schema)
+            structured = with_structured_output(schema, method="function_calling")
         except (NotImplementedError, AttributeError):
             structured = None
 
@@ -759,10 +759,12 @@ async def repair_set(state: AgentState, runtime: Runtime[AgentRuntimeContext]) -
 
 
 def _after_validation(state: AgentState) -> str:
+    if state.get("error_code"):
+        return "persist"
     result = state.get("validation") or {}
     if result.get("valid"):
         return "persist"
-    if state.get("error_code") == "constraint_conflict" or state.get("repair_attempts", 0) >= 2:
+    if state.get("repair_attempts", 0) >= 2:
         return "persist"
     return "repair"
 

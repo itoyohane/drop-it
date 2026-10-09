@@ -76,6 +76,10 @@ python -m backend.evals.run_agent_eval --mode live `
 通过为 0；初始化或配置错误也会非零退出。
 `--baseline previous.json` 比较已有百分比指标，不自动判定回退。
 baseline 应使用相同数据、模型配置、用例范围和重复策略。
+`--threshold` 可使用 `command_accuracy`、`argument_accuracy`、`tool_sequence_accuracy`、
+`tool_execution_success_rate`、`graph_sequence_accuracy`、`task_completion_rate`、
+`set_constraint_pass_rate`、`unauthorized_action_block_rate`、`stability` 和
+`repair_success_rate`。
 
 ## 真实执行证据与指标
 
@@ -92,18 +96,22 @@ baseline 应使用相同数据、模型配置、用例范围和重复策略。
 
 参考曲目的标题解析不是一次虚构的 `search_library` 工具调用；业务事件只有生产发出的
 done/failed 事件。trace 保存实际节点、typed command、工具参数/状态、每轮 run_id、
-持久化 checkpoint 步骤、修复次数、结构化校验问题和真实失败节点。
+持久化 checkpoint 步骤、修复次数、结构化校验问题、真实失败节点和按来源/轮次/节点记录的
+`error_chain`。最终图流报告 `graph_failed` 时，它会成为主要错误，先前节点错误仍保留在链中；
+较早轮次的失败也会保留，即使之后的轮次成功。
 
 - Command Accuracy：最终轮的实际意图与预期 exact match。
 - Argument Accuracy：用例参数断言通过数 / 总断言数；无参数断言时分母为 0。
-- Tool Sequence Accuracy：整个任务的业务事件名称序列 exact match。
+- Tool Sequence Accuracy：整个任务的业务事件名称序列 exact match，只比较名称顺序。
+- Tool Execution Success Rate：至少发出一个业务工具事件的任务中，所有事件状态都明确为 `done` 的比例；
+  没有工具调用的拒答不计入分母，缺少状态也不算成功。
 - Graph Sequence Accuracy：预期节点按顺序出现在实际节点序列中，允许中间插入修复节点。
 - Task Completion Rate：路由、参数、工具/图顺序、complete/interception 预期全部通过，
   没有错误码，且包含 Set 的任务所有 Set 轮均满足约束；收到 complete 不代表任务成功。
 - Set Constraint Pass Rate：所有包含 Set 的任务（含多轮）的约束通过比例。
 - Unauthorized Action Block Rate：越权任务被拒绝且没有业务调用的比例。
 - Stability：有重复执行的用例中，命令、业务参数/状态、任务成功与错误码保持一致的比例；
-  `--rounds 1` 没有重复样本，不构成稳定性证据。
+  它衡量重复结果的一致性，不代表任务成功率。`--rounds 1` 没有重复样本，不构成稳定性证据。
 - P50/P95 Latency：任务端到端延迟（不含初始数据快照时间）。
 - Repair Success Rate：发生修复且所有修复 Set 轮成功的任务数 / 发生修复的任务数，
   不把一个任务的两次修复当成两个样本；没有修复则 N/A。

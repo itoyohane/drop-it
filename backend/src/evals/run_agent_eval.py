@@ -182,6 +182,7 @@ class TraceBuilder:
     command: str | None = None
     graph_steps: list[dict[str, Any]] = field(default_factory=list)
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    error_chain: list[dict[str, Any]] = field(default_factory=list)
     token_usage: dict[str, int] | None = None
     error_code: str | None = None
     completed: bool = False
@@ -206,6 +207,7 @@ class TraceBuilder:
             "command": self.command,
             "graph_steps": self.graph_steps,
             "tool_calls": self.tool_calls,
+            "error_chain": self.error_chain,
             "latency_ms": latency,
             "token_usage": usage,
             "token_usage_status": "available" if usage else "unavailable",
@@ -252,7 +254,9 @@ class FixtureTraceRunner:
                     expected = expected[0]
                 _set_path(arguments_by_tool[assertion["tool"]], assertion["path"], expected)
         for name in case.get("expected_tool_sequence", []):
-            trace.tool_calls.append({"name": name, "arguments": arguments_by_tool.get(name, {})})
+            trace.tool_calls.append({
+                "name": name, "arguments": arguments_by_tool.get(name, {}), "status": "done",
+            })
             trace.graph_steps.append({"name": "tool", "tool": name, "status": "done"})
         trace.graph_steps.append({"name": "complete", "status": "done"})
         trace.completed = bool(case.get("expected_completion", True))
@@ -386,7 +390,10 @@ def evaluate_trace(case: Mapping[str, Any], trace: Mapping[str, Any]) -> dict[st
     if error_code:
         failures.append({
             "code": str(error_code),
-            "node": trace.get("failure_node") or ("tool" if error_code == "tool_failed" else "model"),
+            "node": trace.get("failure_node") or (
+                "graph" if error_code == "graph_failed" else
+                "tool" if error_code == "tool_failed" else "model"
+            ),
         })
     if not command_passed:
         failures.append({"code": "command_mismatch", "node": "route"})
@@ -489,6 +496,11 @@ def compute_metrics(results: Iterable[Mapping[str, Any]], *, input_price_per_mil
     argument_n = sum(bool(item.get("passed")) for item in argument_assertions)
     argument_total = len(argument_assertions)
     sequence_n, _ = count("tool_sequence_passed")
+    tool_runs = [row for row in rows if row.get("trace", {}).get("tool_calls")]
+    successful_tool_runs = sum(
+        all(call.get("status") == "done" for call in row["trace"].get("tool_calls", []))
+        for row in tool_runs
+    )
     completion_n, _ = count("task_completed")
     sets = [item for item in evaluated if item.get("set_constraints_passed") is not None]
     oversteps = [item for item, row in zip(evaluated, rows) if row.get("category") == "overstep"]
@@ -513,6 +525,11 @@ def compute_metrics(results: Iterable[Mapping[str, Any]], *, input_price_per_mil
         "command_accuracy": {"value_pct": _rate(command_n, total), "passed": command_n, "total": total},
         "argument_accuracy": {"value_pct": _rate(argument_n, argument_total), "passed": argument_n, "total": argument_total},
         "tool_sequence_accuracy": {"value_pct": _rate(sequence_n, total), "passed": sequence_n, "total": total},
+        "tool_execution_success_rate": {
+            "value_pct": _rate(successful_tool_runs, len(tool_runs)),
+            "passed": successful_tool_runs,
+            "total": len(tool_runs),
+        },
         "graph_sequence_accuracy": {"value_pct": _rate(sum(bool(x.get("graph_sequence_passed")) for x in evaluated), total), "passed": sum(bool(x.get("graph_sequence_passed")) for x in evaluated), "total": total},
         "task_completion_rate": {"value_pct": _rate(completion_n, total), "passed": completion_n, "total": total},
         "set_constraint_pass_rate": {"value_pct": _rate(sum(bool(x.get("set_constraints_passed")) for x in sets), len(sets)), "passed": sum(bool(x.get("set_constraints_passed")) for x in sets), "total": len(sets)},
@@ -607,6 +624,7 @@ def render_markdown(payload: Mapping[str, Any], *, baseline: Mapping[str, Any] |
         )
     execution_mode = payload.get("execution_mode", "unknown")
     lines.extend(["", "Chat-model usage/cost excludes embedding and intent-classification requests; partial usage is a known subtotal, not a complete bill."])
+    lines.extend(["", "Stability measures consistency across repeats, not task success."])
     lines.extend(["", "## Boundaries", "", f"- Current execution mode is `{execution_mode}`; live traces contain actual compiled LangGraph node updates.", "- Token usage is `unavailable` when provider metadata is missing. Estimated cost remains null unless both input and output prices are explicitly supplied.", f"- Pricing note: {pricing.get('note', 'caller supplied pricing')}"])
     comparison = compare_baseline(payload, baseline)
     if comparison:
@@ -737,6 +755,11 @@ class LiveAgentRunner:
         failure_node = None
         wrapped_models = {}
 
+        def record_error(source: str, turn: int, node: str, code: str) -> None:
+            trace.error_chain.append({
+                "source": source, "turn": turn, "node": node, "error_code": code,
+            })
+
         def model_factory():
             model = original_model_factory()
             if id(model) in wrapped_models:
@@ -758,6 +781,7 @@ class LiveAgentRunner:
                 turn_run_id = uuid4().hex
                 completed = False
                 turn_error = None
+                turn_graph_failed = False
 
                 def observe(update):
                     nonlocal failure_node
@@ -767,6 +791,8 @@ class LiveAgentRunner:
                         "name": update["node"], "turn": index, "run_id": turn_run_id,
                         "status": "failed" if code else "done", "error_code": code,
                     })
+                    if code:
+                        record_error("node", index, update["node"], code)
                     if code and failure_node is None:
                         failure_node = update["node"]
 
@@ -779,9 +805,30 @@ class LiveAgentRunner:
                     elif event["type"] == "complete":
                         completed = True
                         trace.output = event
-                        turn_error = turn_error or event.get("error_code")
+                        code = event.get("error_code")
+                        if code:
+                            record_error(
+                                "complete", index,
+                                "graph" if code == "graph_failed" else "complete", code,
+                            )
+                            if code == "graph_failed":
+                                turn_graph_failed = True
+                                turn_error = code
+                                failure_node = "graph"
+                            elif not turn_graph_failed:
+                                turn_error = code
                     elif event["type"] == "error":
-                        turn_error = turn_error or event.get("error_code") or "agent_error"
+                        code = event.get("error_code") or "agent_error"
+                        record_error(
+                            "stream", index,
+                            "graph" if code == "graph_failed" else "stream", code,
+                        )
+                        if code == "graph_failed":
+                            turn_graph_failed = True
+                            turn_error = code
+                            failure_node = "graph"
+                        elif not turn_graph_failed and turn_error is None:
+                            turn_error = code
 
                 command = dict(_model_mapping(state.get("command")) or {})
                 arguments = dict(command)
@@ -799,7 +846,7 @@ class LiveAgentRunner:
                     "turn": index, "run_id": turn_run_id, "route": state.get("route"),
                     "command": command, "completed": completed,
                     "repair_attempts": state.get("repair_attempts", 0),
-                    "error_code": state.get("error_code") or turn_error,
+                    "error_code": "graph_failed" if turn_graph_failed else turn_error or state.get("error_code"),
                     "checkpoints": [row["step"] for row in self.store.list_agent_checkpoints(turn_run_id)],
                 }
                 if state.get("route") == "generate_dj_set":
@@ -815,7 +862,11 @@ class LiveAgentRunner:
                         turn_trace["validation"] = state["validation"]
                     trace.constraint_issues.extend(constraints["issues"])
                 trace.turn_traces.append(turn_trace)
-                trace.error_code = trace.error_code or state.get("error_code") or turn_error
+                if turn_graph_failed:
+                    trace.error_code = "graph_failed"
+                    failure_node = "graph"
+                elif trace.error_code is None:
+                    trace.error_code = turn_error or state.get("error_code")
             trace.completed = all(turn["completed"] for turn in trace.turn_traces)
             trace.intercepted = bool(trace.turn_traces) and all(
                 turn["route"] == "reject" for turn in trace.turn_traces
@@ -826,7 +877,9 @@ class LiveAgentRunner:
             repaired = [turn for turn in sets if turn["repair_attempts"]]
             trace.repair_success = all(turn["constraints_passed"] for turn in repaired) if repaired else None
         except Exception as exc:
-            trace.error_code = trace.error_code or "runner_error"
+            if trace.error_code is None:
+                trace.error_code = "runner_error"
+            record_error("runner", len(trace.turn_traces) + 1, "runner", "runner_error")
             trace.output = {"exception_type": type(exc).__name__}
         finally:
             self.agent.trace_callback = original_observer
@@ -847,7 +900,8 @@ def main() -> int:
     _validate_prices(args.input_price_per_million, args.output_price_per_million)
     thresholds = parse_thresholds(args.threshold)
     unknown = set(thresholds) - {
-        "command_accuracy", "argument_accuracy", "tool_sequence_accuracy", "graph_sequence_accuracy",
+        "command_accuracy", "argument_accuracy", "tool_sequence_accuracy", "tool_execution_success_rate",
+        "graph_sequence_accuracy",
         "task_completion_rate", "set_constraint_pass_rate", "unauthorized_action_block_rate",
         "stability", "repair_success_rate",
     }

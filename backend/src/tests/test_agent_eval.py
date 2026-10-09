@@ -45,6 +45,7 @@ def test_fixture_runner_exposes_trace_and_all_metrics():
     assert {"run_id", "command", "graph_steps", "tool_calls", "latency_ms", "token_usage",
             "estimated_cost", "repair_attempts", "error_code"} <= trace.keys()
     assert payload["metrics"]["command_accuracy"]["value_pct"] == 100.0
+    assert payload["metrics"]["tool_execution_success_rate"]["value_pct"] == 100.0
     assert payload["metrics"]["repair_success_rate"]["status"] == "not_applicable"
 
 
@@ -149,6 +150,34 @@ def test_task_completion_is_stricter_than_completion_event_and_tool_failure_is_s
     }
 
 
+def test_tool_execution_success_is_separate_from_name_sequence_accuracy():
+    search = load_cases()[0]
+    overstep = load_cases()[-1]
+    cases = [search | {"repeats": 1}, overstep | {"repeats": 1}]
+
+    def runner(case, *, repeat_index):
+        if case["expected_command"] == "overstep":
+            return {
+                "command": "overstep", "tool_calls": [], "completed": True,
+                "intercepted": True, "graph_steps": [],
+            }
+        status = {1: "done", 2: "failed", 3: None}[repeat_index]
+        call = {"name": "search_library", "arguments": {}}
+        if status is not None:
+            call["status"] = status
+        return {
+            "command": "search_library", "tool_calls": [call], "completed": True,
+            "intercepted": False, "graph_steps": [],
+        }
+
+    payload = evaluate_cases(cases, runner, rounds=3)
+    metrics = payload["metrics"]
+    assert metrics["tool_sequence_accuracy"]["value_pct"] == 100.0
+    assert metrics["tool_execution_success_rate"] == {
+        "value_pct": 33.33, "passed": 1, "total": 3,
+    }
+
+
 def test_stability_includes_normalized_arguments_completion_and_error():
     case = load_cases()[-1]
     def runner(case, *, repeat_index):
@@ -185,3 +214,10 @@ def test_markdown_summarizes_failure_code_and_node():
     assert "Failure diagnostics" in report
     assert "command_mismatch" in report
     assert "route" in report
+
+
+def test_markdown_explains_tool_execution_and_stability_metrics():
+    payload = evaluate_cases([load_cases()[0] | {"repeats": 1}], FixtureTraceRunner())
+    report = render_markdown(payload)
+    assert "tool_execution_success_rate" in report
+    assert "Stability measures consistency across repeats, not task success." in report

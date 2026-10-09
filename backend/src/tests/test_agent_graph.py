@@ -4,12 +4,14 @@ from pathlib import Path
 import backend
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
+from langchain_openai import ChatOpenAI
 from pydantic import ValidationError
 import pytest
 
 from backend.agent.agent import DropItAgent
 from backend.agent.graph import (
-    GenerateSetCommand, IntentRecognizer, OVERSTEP_RESPONSE, SearchCommand,
+    AgentRuntimeContext, GenerateSetCommand, IntentRecognizer, OVERSTEP_RESPONSE,
+    SearchCommand, build_graph, extract_command,
 )
 from backend.agent.retrieval import DropItToolRegistry
 from backend.config import Settings
@@ -39,6 +41,24 @@ class DelayedStreamingModel:
 
     async def ainvoke(self, messages):
         return AIMessage(content="unused")
+
+
+class StructuredCommandModel:
+    def __init__(self, payload):
+        self.payload = payload
+        self.options = None
+
+    def with_structured_output(self, schema, **kwargs):
+        self.options = kwargs
+        return self
+
+    async def ainvoke(self, messages):
+        return self.payload
+
+
+class ResponseOnlyModel:
+    async def ainvoke(self, messages):
+        return AIMessage(content="Set 编排失败，未保存歌单。")
 
 
 def collect(agent, project_id, conversation_id, text):
@@ -107,6 +127,99 @@ def test_search_route_uses_typed_command_and_preserves_sse_contract(library):
 def test_command_schemas_forbid_model_selected_scope():
     with pytest.raises(ValidationError):
         SearchCommand.model_validate({"query": "house", "project_id": "other-project"})
+
+
+@pytest.mark.parametrize(
+    "payload,valid",
+    [
+        ({"query": "house", "limit": 5}, True),
+        ({"query": "house", "unknown": "scope"}, False),
+    ],
+)
+def test_command_extraction_uses_function_calling_and_keeps_strict_validation(payload, valid):
+    model = StructuredCommandModel(payload)
+
+    async def run():
+        return await extract_command(model, "search_library", [], "搜 house")
+
+    if valid:
+        command = asyncio.run(run())
+        assert command.query == "house"
+        assert model.options == {"method": "function_calling"}
+    else:
+        with pytest.raises(ValidationError):
+            asyncio.run(run())
+        assert model.options == {"method": "function_calling"}
+
+
+def test_chat_openai_function_calling_binding_omits_json_schema_response_format():
+    structured = ChatOpenAI(
+        model="test-model", api_key="test-only", base_url="http://localhost"
+    ).with_structured_output(SearchCommand, method="function_calling")
+
+    bindings = [step for step in structured.steps if getattr(step, "kwargs", None) is not None]
+    assert len(bindings) == 1
+    kwargs = bindings[0].kwargs
+    assert "response_format" not in kwargs
+    assert kwargs["tools"][0]["function"]["parameters"]["additionalProperties"] is False
+
+
+@pytest.mark.parametrize("error_code", ["candidate_retrieval_failed", "set_planning_failed"])
+@pytest.mark.parametrize("recursion_limit", [8, 12])
+def test_set_node_error_exits_real_graph_without_playlist_or_repair(
+    library, error_code, recursion_limit
+):
+    from langgraph.errors import GraphRecursionError
+
+    store, project, _, _, registry = library
+    graph = build_graph()
+    state = {
+        "route": "generate_dj_set",
+        "resume_node": "validate_set",
+        "user_text": "生成一个 DJ Set",
+        "history": [{"role": "user", "content": "生成一个 DJ Set"}],
+        "error_code": error_code,
+        "error_detail": "测试故障",
+        "repair_attempts": 0,
+        "playlist": None,
+        "candidate_tracks": [],
+        "candidate_track_ids": [],
+        "tool_events": [],
+    }
+    context = AgentRuntimeContext(
+        project_id=project.id,
+        conversation_id="test-conversation",
+        store=store,
+        registry=registry,
+        model_factory=ResponseOnlyModel,
+    )
+
+    async def collect_updates():
+        updates = []
+        async for update in graph.astream(
+            state,
+            context=context,
+            config={"recursion_limit": recursion_limit},
+            stream_mode="updates",
+        ):
+            updates.append(update)
+        return updates
+
+    try:
+        updates = asyncio.run(collect_updates())
+    except GraphRecursionError as exc:
+        pytest.fail(f"graph cycled after {error_code}: {exc}")
+
+    nodes = [name for update in updates for name in update]
+    assert nodes == ["validate_set", "persist_set", "respond"]
+    final_state = {}
+    for update in updates:
+        for delta in update.values():
+            if isinstance(delta, dict):
+                final_state.update(delta)
+    assert final_state["error_code"] == error_code
+    assert final_state["repair_attempts"] == 0
+    assert store.list_playlists(project.id) == []
 
 
 def test_final_response_tokens_stream_before_graph_node_finishes(library):
